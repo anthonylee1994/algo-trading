@@ -17,8 +17,9 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--cash", type=float, default=10_000)
-    parser.add_argument("--futu-host", default="0.0.0.0")
+    parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
+    parser.add_argument("--plan", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--auto", action="store_true")
     parser.add_argument("--cancel-open-orders", action="store_true")
@@ -44,6 +45,14 @@ def main():
     candidates = fetch_candidates()
     candidates = candidates.head(args.limit)
     summary = summarize_candidates(candidates)
+
+    for candidate in summary:
+        print(candidate)
+
+    if not (args.plan or args.execute or args.auto):
+        print("Screener only. Add --plan for a Futu-backed dry-run strategy plan.")
+        return
+
     trd_env = TrdEnv.REAL if args.real else TrdEnv.SIMULATE
     account_summary = get_account_summary(
         host=args.futu_host,
@@ -66,9 +75,6 @@ def main():
     )
 
     print({"account": account_summary})
-    for candidate in summary:
-        print(candidate)
-
     for item in plan:
         print(
             {
@@ -81,7 +87,7 @@ def main():
             }
         )
 
-    if not (args.execute or args.auto):
+    if args.plan and not (args.execute or args.auto):
         print(
             "DRY RUN only. Add --execute to place orders, or --auto for guarded automation."
         )

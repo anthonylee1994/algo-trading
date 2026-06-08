@@ -14,11 +14,17 @@ Run:
 uv run python main.py
 ```
 
+Show only the Finviz screener results without calling Futu:
+
+```sh
+uv run python main.py --limit 10
+```
+
 Dry-run the strategy plan for the first 10 filtered US stocks using Futu OpenD
 quotes, history, and positions:
 
 ```sh
-uv run python main.py --cash 10000
+uv run python main.py --limit 10 --cash 10000 --plan
 ```
 
 The strategy buys only when the stock and SPY are in uptrends, and sells current

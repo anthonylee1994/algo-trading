@@ -1,0 +1,139 @@
+{
+  "orders": [
+    {
+      "action": "SELL",
+      "code": "US.NVDA",
+      "company": "",
+      "created_at": "2026-06-08T06:28:34.307357+00:00",
+      "notional": 175155.4,
+      "price": 205.1,
+      "quantity": 854,
+      "reason": "rebalance overweight",
+      "result": {
+        "action": "SELL",
+        "code": "US.NVDA",
+        "price": 205.1,
+        "quantity": 854,
+        "reason": "rebalance overweight",
+        "result": [
+          {
+            "aux_price": "N/A",
+            "code": "US.NVDA",
+            "create_time": "2026-06-08 02:28:34",
+            "currency": "USD",
+            "dealt_avg_price": 0.0,
+            "dealt_qty": 0.0,
+            "fill_outside_rth": false,
+            "jp_acc_type": "N/A",
+            "last_err_msg": "",
+            "order_id": "8863324",
+            "order_status": "SUBMITTING",
+            "order_type": "NORMAL",
+            "price": 205.1,
+            "qty": 854.0,
+            "remark": "",
+            "session": "RTH",
+            "stock_name": "NVIDIA",
+            "time_in_force": "DAY",
+            "trail_spread": "N/A",
+            "trail_type": "N/A",
+            "trail_value": "N/A",
+            "trd_side": "SELL",
+            "updated_time": "2026-06-08 02:28:34"
+          }
+        ]
+      },
+      "ticker": "NVDA"
+    },
+    {
+      "action": "SELL",
+      "code": "US.TSM",
+      "company": "",
+      "created_at": "2026-06-08T06:28:34.307357+00:00",
+      "notional": 116662.77,
+      "price": 415.17,
+      "quantity": 281,
+      "reason": "rebalance overweight",
+      "result": {
+        "action": "SELL",
+        "code": "US.TSM",
+        "price": 415.17,
+        "quantity": 281,
+        "reason": "rebalance overweight",
+        "result": [
+          {
+            "aux_price": "N/A",
+            "code": "US.TSM",
+            "create_time": "2026-06-08 02:28:34",
+            "currency": "USD",
+            "dealt_avg_price": 0.0,
+            "dealt_qty": 0.0,
+            "fill_outside_rth": false,
+            "jp_acc_type": "N/A",
+            "last_err_msg": "",
+            "order_id": "8863325",
+            "order_status": "SUBMITTING",
+            "order_type": "NORMAL",
+            "price": 415.17,
+            "qty": 281.0,
+            "remark": "",
+            "session": "RTH",
+            "stock_name": "Taiwan Semiconductor",
+            "time_in_force": "DAY",
+            "trail_spread": "N/A",
+            "trail_type": "N/A",
+            "trail_value": "N/A",
+            "trd_side": "SELL",
+            "updated_time": "2026-06-08 02:28:34"
+          }
+        ]
+      },
+      "ticker": "TSM"
+    },
+    {
+      "action": "SELL",
+      "code": "US.MU",
+      "company": "",
+      "created_at": "2026-06-08T06:28:34.307357+00:00",
+      "notional": 108865.26,
+      "price": 864.01,
+      "quantity": 126,
+      "reason": "rebalance overweight",
+      "result": {
+        "action": "SELL",
+        "code": "US.MU",
+        "price": 864.01,
+        "quantity": 126,
+        "reason": "rebalance overweight",
+        "result": [
+          {
+            "aux_price": "N/A",
+            "code": "US.MU",
+            "create_time": "2026-06-08 02:28:34",
+            "currency": "USD",
+            "dealt_avg_price": 0.0,
+            "dealt_qty": 0.0,
+            "fill_outside_rth": false,
+            "jp_acc_type": "N/A",
+            "last_err_msg": "",
+            "order_id": "8863326",
+            "order_status": "SUBMITTING",
+            "order_type": "NORMAL",
+            "price": 864.01,
+            "qty": 126.0,
+            "remark": "",
+            "session": "RTH",
+            "stock_name": "Micron Technology",
+            "time_in_force": "DAY",
+            "trail_spread": "N/A",
+            "trail_type": "N/A",
+            "trail_value": "N/A",
+            "trd_side": "SELL",
+            "updated_time": "2026-06-08 02:28:34"
+          }
+        ]
+      },
+      "ticker": "MU"
+    }
+  ]
+}

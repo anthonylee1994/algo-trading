@@ -17,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--cash", type=float, default=10_000)
-    parser.add_argument("--futu-host", default="127.0.0.1")
+    parser.add_argument("--futu-host", default="0.0.0.0")
     parser.add_argument("--futu-port", type=int, default=11111)
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--auto", action="store_true")

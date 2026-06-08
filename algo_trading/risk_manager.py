@@ -67,11 +67,11 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
-def get_available_cash(
+def _query_account_info(
     host: str,
     port: int,
     trd_env: str,
-) -> float:
+) -> pd.Series | None:
     trade_ctx = OpenSecTradeContext(
         filter_trdmarket=TrdMarket.US,
         host=host,
@@ -86,16 +86,54 @@ def get_available_cash(
         if ret != RET_OK:
             raise RuntimeError(f"Futu account info error: {data}")
         if data.empty:
-            return 0
-        row = data.iloc[0]
-        return max(
-            _to_float(row.get("available_funds")),
-            _to_float(row.get("cash")),
-            _to_float(row.get("us_cash")),
-            _to_float(row.get("usd_net_cash_power")),
-        )
+            return None
+        return data.iloc[0]
     finally:
         trade_ctx.close()
+
+
+def _account_summary_from_row(row: pd.Series | None) -> dict[str, float]:
+    if row is None:
+        return {
+            "available_cash": 0,
+            "cash": 0,
+            "market_value": 0,
+            "total_assets": 0,
+        }
+
+    cash = max(
+        _to_float(row.get("cash")),
+        _to_float(row.get("us_cash")),
+    )
+    available_cash = max(
+        _to_float(row.get("available_funds")),
+        cash,
+        _to_float(row.get("usd_net_cash_power")),
+    )
+    market_value = max(
+        _to_float(row.get("market_val")),
+        _to_float(row.get("long_mv")),
+    )
+    total_assets = max(
+        _to_float(row.get("total_assets")),
+        cash + market_value,
+        available_cash + market_value,
+    )
+    return {
+        "available_cash": available_cash,
+        "cash": cash,
+        "market_value": market_value,
+        "total_assets": total_assets,
+    }
+
+
+def get_available_cash(
+    host: str,
+    port: int,
+    trd_env: str,
+) -> float:
+    row = _query_account_info(host=host, port=port, trd_env=trd_env)
+    return _account_summary_from_row(row)["available_cash"]
 
 
 def get_account_summary(
@@ -103,54 +141,8 @@ def get_account_summary(
     port: int,
     trd_env: str,
 ) -> dict[str, float]:
-    trade_ctx = OpenSecTradeContext(
-        filter_trdmarket=TrdMarket.US,
-        host=host,
-        port=port,
-    )
-    try:
-        ret, data = trade_ctx.accinfo_query(
-            trd_env=trd_env,
-            refresh_cache=True,
-            currency=Currency.USD,
-        )
-        if ret != RET_OK:
-            raise RuntimeError(f"Futu account info error: {data}")
-        if data.empty:
-            return {
-                "available_cash": 0,
-                "cash": 0,
-                "market_value": 0,
-                "total_assets": 0,
-            }
-
-        row = data.iloc[0]
-        cash = max(
-            _to_float(row.get("cash")),
-            _to_float(row.get("us_cash")),
-        )
-        available_cash = max(
-            _to_float(row.get("available_funds")),
-            cash,
-            _to_float(row.get("usd_net_cash_power")),
-        )
-        market_value = max(
-            _to_float(row.get("market_val")),
-            _to_float(row.get("long_mv")),
-        )
-        total_assets = max(
-            _to_float(row.get("total_assets")),
-            cash + market_value,
-            available_cash + market_value,
-        )
-        return {
-            "available_cash": available_cash,
-            "cash": cash,
-            "market_value": market_value,
-            "total_assets": total_assets,
-        }
-    finally:
-        trade_ctx.close()
+    row = _query_account_info(host=host, port=port, trd_env=trd_env)
+    return _account_summary_from_row(row)
 
 
 def get_open_orders(

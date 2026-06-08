@@ -13,7 +13,7 @@ from algo_trading.risk_manager import (
 from futu import OrderType, TrdEnv
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=10)
     parser.add_argument("--cash", type=float, default=10_000)

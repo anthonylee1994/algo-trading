@@ -30,6 +30,18 @@ class TradePlanItem:
     reason: str
 
 
+@dataclass(frozen=True)
+class StrategyInputs:
+    candidate_codes: list[str]
+    positions: dict[str, dict[str, float]]
+    histories: dict[str, pd.DataFrame]
+    prices: dict[str, float]
+    spy_history: pd.DataFrame
+    available_cash: float
+    target_position_value: float
+    rebalance_value: float
+
+
 def futu_us_code(ticker: str) -> str:
     return f"US.{ticker}"
 
@@ -208,22 +220,18 @@ def build_equal_weight_buy_plan(
     return plan
 
 
-def build_strategy_plan(
+def _prepare_strategy_inputs(
     candidates: pd.DataFrame,
     total_cash: float,
-    host: str = "127.0.0.1",
-    port: int = 11111,
-    trd_env: str = TrdEnv.SIMULATE,
-    account_summary: dict[str, float] | None = None,
-    target_weight: float | None = None,
-    rebalance_threshold: float = 0.03,
-    max_position_weight: float = 0.12,
-    max_gross_exposure: float = 0.8,
-    sell_non_universe: bool = False,
-) -> list[TradePlanItem]:
-    if candidates.empty:
-        return []
-
+    host: str,
+    port: int,
+    trd_env: str,
+    account_summary: dict[str, float] | None,
+    target_weight: float | None,
+    max_position_weight: float,
+    max_gross_exposure: float,
+    rebalance_threshold: float,
+) -> StrategyInputs:
     candidate_codes = [
         futu_us_code(str(ticker)) for ticker in candidates["Ticker"].tolist()
     ]
@@ -232,29 +240,52 @@ def build_strategy_plan(
     codes = sorted(set(candidate_codes + position_codes + ["US.SPY"]))
     histories = get_price_history(host=host, port=port, codes=codes)
     prices = _get_latest_prices(host=host, port=port, codes=codes)
-    spy_history = histories["US.SPY"]
+
     summary = account_summary or {}
     total_assets = float(summary.get("total_assets") or total_cash)
     available_cash = float(summary.get("available_cash") or total_cash)
     portfolio_target_value = min(total_cash, total_assets * max_gross_exposure)
     effective_target_weight = target_weight or (1 / len(candidates))
     effective_target_weight = min(effective_target_weight, max_position_weight)
-    target_position_value = portfolio_target_value * effective_target_weight
-    rebalance_value = total_assets * rebalance_threshold
 
+    return StrategyInputs(
+        candidate_codes=candidate_codes,
+        positions=positions,
+        histories=histories,
+        prices=prices,
+        spy_history=histories["US.SPY"],
+        available_cash=available_cash,
+        target_position_value=portfolio_target_value * effective_target_weight,
+        rebalance_value=total_assets * rebalance_threshold,
+    )
+
+
+def _price_for_code(
+    code: str,
+    history: pd.DataFrame,
+    prices: dict[str, float],
+) -> float:
+    return prices.get(code, float(history["close"].iloc[-1]))
+
+
+def _build_sell_plan(
+    inputs: StrategyInputs,
+    sell_non_universe: bool,
+) -> list[TradePlanItem]:
     plan: list[TradePlanItem] = []
 
-    for code, position in positions.items():
-        history = histories.get(code)
+    for code, position in inputs.positions.items():
+        history = inputs.histories.get(code)
         if history is None:
             continue
+
         ticker = code.removeprefix("US.")
-        price = prices.get(code, float(history["close"].iloc[-1]))
+        price = _price_for_code(code, history, inputs.prices)
         quantity = math.floor(float(position["quantity"]))
         if quantity <= 0:
             continue
 
-        in_universe = code in candidate_codes
+        in_universe = code in inputs.candidate_codes
         position_value = price * quantity
         should_sell, reason = _sell_signal(history, position)
         if sell_non_universe and not in_universe:
@@ -263,8 +294,8 @@ def build_strategy_plan(
         elif not in_universe:
             continue
         elif not should_sell:
-            excess_value = position_value - target_position_value
-            if excess_value < rebalance_value:
+            excess_value = position_value - inputs.target_position_value
+            if excess_value < inputs.rebalance_value:
                 continue
             sell_quantity = math.floor(excess_value / price)
             if sell_quantity <= 0:
@@ -285,37 +316,44 @@ def build_strategy_plan(
             )
         )
 
-    if candidates.empty:
-        return plan
+    return plan
 
+
+def _build_buy_plan(
+    candidates: pd.DataFrame,
+    inputs: StrategyInputs,
+) -> list[TradePlanItem]:
+    plan: list[TradePlanItem] = []
     planned_buy_notional = 0.0
+
     for row in candidates.to_dict(orient="records"):
         ticker = str(row["Ticker"])
         code = futu_us_code(ticker)
-        history = histories.get(code)
+        history = inputs.histories.get(code)
         if history is None:
             continue
 
-        should_buy, reason = _buy_signal(history, spy_history)
+        should_buy, reason = _buy_signal(history, inputs.spy_history)
         if not should_buy:
             continue
 
-        price = prices.get(code, float(history["close"].iloc[-1]))
+        price = _price_for_code(code, history, inputs.prices)
         limit_price = normalize_us_order_price(price * 1.003, "BUY")
-        current_quantity = float(positions.get(code, {}).get("quantity") or 0)
+        current_quantity = float(inputs.positions.get(code, {}).get("quantity") or 0)
         current_value = current_quantity * price
-        underweight_value = target_position_value - current_value
-        if underweight_value < rebalance_value:
+        underweight_value = inputs.target_position_value - current_value
+        if underweight_value < inputs.rebalance_value:
             continue
 
-        buy_value = min(underweight_value, available_cash - planned_buy_notional)
+        buy_value = min(underweight_value, inputs.available_cash - planned_buy_notional)
         if buy_value <= 0:
             continue
+
         quantity = math.floor(buy_value / limit_price)
         if quantity <= 0:
             continue
-        planned_buy_notional += limit_price * quantity
 
+        planned_buy_notional += limit_price * quantity
         plan.append(
             TradePlanItem(
                 action="BUY",
@@ -328,7 +366,42 @@ def build_strategy_plan(
                 reason=reason if current_quantity <= 0 else "rebalance underweight",
             )
         )
+
     return plan
+
+
+def build_strategy_plan(
+    candidates: pd.DataFrame,
+    total_cash: float,
+    host: str = "127.0.0.1",
+    port: int = 11111,
+    trd_env: str = TrdEnv.SIMULATE,
+    account_summary: dict[str, float] | None = None,
+    target_weight: float | None = None,
+    rebalance_threshold: float = 0.03,
+    max_position_weight: float = 0.12,
+    max_gross_exposure: float = 0.8,
+    sell_non_universe: bool = False,
+) -> list[TradePlanItem]:
+    if candidates.empty:
+        return []
+
+    inputs = _prepare_strategy_inputs(
+        candidates=candidates,
+        total_cash=total_cash,
+        host=host,
+        port=port,
+        trd_env=trd_env,
+        account_summary=account_summary,
+        target_weight=target_weight,
+        max_position_weight=max_position_weight,
+        max_gross_exposure=max_gross_exposure,
+        rebalance_threshold=rebalance_threshold,
+    )
+    return [
+        *_build_sell_plan(inputs=inputs, sell_non_universe=sell_non_universe),
+        *_build_buy_plan(candidates=candidates, inputs=inputs),
+    ]
 
 
 def place_orders(

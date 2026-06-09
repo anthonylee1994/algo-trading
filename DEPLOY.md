@@ -232,98 +232,47 @@ rm STOP_TRADING
 `trade_journal.json` stores submitted and cancelled order records. Back it up
 before redeploying or replacing the server.
 
-## 7. Optional Daily Timer
+## 7. Daily Cron Job
 
-Create a runner script:
+The daily runner starts Futu OpenD, waits until the API is ready, places
+simulated orders, and stops Futu OpenD when it exits. It does not place real
+orders because it does not pass `--real`.
 
-```sh
-mkdir -p ~/.local/bin
-vim ~/.local/bin/algo-trading-run
-```
-
-Script content:
+Make it executable after deployment:
 
 ```sh
-#!/usr/bin/env sh
-set -eu
-
-cd "$HOME/projects/algo-trading"
-set -a
-. ./.env
-set +a
-
-uv run python main.py \
-  --cash 100000 \
-  --futu-host 127.0.0.1 \
-  --futu-port 11111 \
-  --auto \
-  --real \
-  --cancel-open-orders \
-  --max-gross-exposure 0.8 \
-  --max-position-weight 0.12 \
-  --rebalance-threshold 0.03
+chmod +x scripts/daily_trade.sh
 ```
 
-Make it executable:
+Test the cron behavior against the simulated trading environment:
 
 ```sh
-chmod +x ~/.local/bin/algo-trading-run
+scripts/daily_trade.sh
 ```
 
-Create the systemd user service:
+Install the cron job:
 
 ```sh
-mkdir -p ~/.config/systemd/user
-vim ~/.config/systemd/user/algo-trading.service
+crontab -e
 ```
 
-```ini
-[Unit]
-Description=Algo Trading Daily Run
-After=default.target
-
-[Service]
-Type=oneshot
-ExecStart=%h/.local/bin/algo-trading-run
-WorkingDirectory=%h/projects/algo-trading
+```cron
+0 22 * * * cd /root/projects/algo-trading && /root/projects/algo-trading/scripts/daily_trade.sh >> /root/projects/algo-trading/logs/daily_trade.log 2>&1
 ```
 
-Create the timer:
+Check the installed cron and logs:
 
 ```sh
-vim ~/.config/systemd/user/algo-trading.timer
+crontab -l
+tail -f logs/daily_trade.log
 ```
 
-```ini
-[Unit]
-Description=Run Algo Trading Daily
+The cron example uses server local time. On the current server that is HKT, so
+`0 22 * * *` runs daily at 22:00 HKT.
 
-[Timer]
-OnCalendar=Mon..Fri 22:35:00
-Persistent=true
-Unit=algo-trading.service
-
-[Install]
-WantedBy=timers.target
-```
-
-Enable it:
-
-```sh
-systemctl --user daemon-reload
-systemctl --user enable --now algo-trading.timer
-loginctl enable-linger "$USER"
-```
-
-Check timer and logs:
-
-```sh
-systemctl --user list-timers algo-trading.timer
-journalctl --user -u algo-trading.service -f
-```
-
-The timer example uses server local time. Adjust `OnCalendar` to match your
-market-open workflow and server timezone.
+The runner uses these optional env overrides: `LIMIT`, `CASH`,
+`MAX_GROSS_EXPOSURE`, `MAX_POSITION_WEIGHT`, `REBALANCE_THRESHOLD`,
+`MAX_DAILY_ORDERS`, `MAX_DAILY_NOTIONAL`, and `MAX_SINGLE_ORDER_NOTIONAL`.
 
 ## 8. Update Deployment
 
@@ -332,7 +281,7 @@ cd ~/projects/algo-trading
 git pull
 uv sync
 uv run python -m compileall main.py algo_trading
-systemctl --user restart algo-trading.timer
+chmod +x scripts/daily_trade.sh
 ```
 
 If OpenD needs an image update:

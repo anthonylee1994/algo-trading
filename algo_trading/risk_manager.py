@@ -261,6 +261,29 @@ def _today_journal_orders(journal: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def _is_submitted_trade_order(order: dict[str, Any]) -> bool:
+    if order.get("action") not in {"BUY", "SELL"}:
+        return False
+
+    result = order.get("result")
+    if not isinstance(result, dict):
+        return False
+
+    nested = result.get("result")
+    if isinstance(nested, list):
+        return any(isinstance(item, dict) and item.get("order_id") for item in nested)
+
+    return bool(result.get("order_id"))
+
+
+def _today_risk_orders(journal: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        order
+        for order in _today_journal_orders(journal)
+        if _is_submitted_trade_order(order)
+    ]
+
+
 def validate_plan(
     plan: list[TradePlanItem],
     host: str,
@@ -277,7 +300,7 @@ def validate_plan(
         raise RuntimeError(f"Open orders exist. No new orders placed: {open_orders}")
 
     journal = load_journal()
-    today_orders = _today_journal_orders(journal)
+    today_orders = _today_risk_orders(journal)
     if len(today_orders) >= max_daily_orders:
         raise RuntimeError("Daily order count limit reached. No orders placed.")
 

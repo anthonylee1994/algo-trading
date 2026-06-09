@@ -11,7 +11,7 @@ from algo_trading.risk_manager import (
     record_order_results,
     validate_plan,
 )
-from futu import OrderType, TrdEnv
+from futu import OrderType, SysConfig, TrdEnv
 
 
 def main() -> None:
@@ -20,6 +20,7 @@ def main() -> None:
     parser.add_argument("--cash", type=float, default=1_000_000)
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
+    parser.add_argument("--futu-rsa-file", default=os.getenv("FUTU_OPEND_RSA_FILE"))
     parser.add_argument("--check-futu", action="store_true")
     parser.add_argument("--plan", action="store_true")
     parser.add_argument("--execute", action="store_true")
@@ -43,6 +44,10 @@ def main() -> None:
         default=OrderType.MARKET,
     )
     args = parser.parse_args()
+
+    if args.futu_rsa_file:
+        SysConfig.enable_proto_encrypt(True)
+        SysConfig.set_init_rsa_file(args.futu_rsa_file)
 
     if args.check_futu:
         trd_env = TrdEnv.REAL if args.real else TrdEnv.SIMULATE

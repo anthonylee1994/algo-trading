@@ -42,12 +42,13 @@ openssl genrsa -out ~/futu-opend/futu.pem 1024
 Create an env file for the OpenD container:
 
 ```sh
-nano ~/futu-opend/.env
+vim ~/futu-opend/.env
 ```
 
 ```sh
 FUTU_ACCOUNT_ID=replace-me
 FUTU_ACCOUNT_PWD_MD5=replace-me
+FUTU_OPEND_IP=127.0.0.1
 ```
 
 Compute the password MD5 on Linux:
@@ -56,7 +57,9 @@ Compute the password MD5 on Linux:
 echo -n 'your-futu-password' | md5sum | awk '{print $1}'
 ```
 
-Start OpenD. The named volume keeps the login session across container
+Start OpenD. Use host networking so the host app connects as `127.0.0.1`;
+otherwise OpenD treats trade API calls as cross-network traffic and requires
+protocol encryption. The named volume keeps the login session across container
 recreates, so SMS verification is usually only needed on first run, account
 switch, or when Futu invalidates the device whitelist.
 
@@ -64,9 +67,8 @@ switch, or when Futu invalidates the device whitelist.
 docker run -d \
   --name futu-opend-docker \
   --restart unless-stopped \
+  --network host \
   --env-file ~/futu-opend/.env \
-  -p 127.0.0.1:11111:11111 \
-  -p 127.0.0.1:22222:22222 \
   -v ~/futu-opend/futu.pem:/.futu/futu.pem \
   -v futu-opend-data:/home/futu/.com.futunn.FutuOpenD \
   ghcr.io/manhinhang/futu-opend-docker:ubuntu-stable
@@ -215,8 +217,9 @@ Common causes:
 - SMS verification is waiting on telnet port `22222`.
 - Picture CAPTCHA is waiting in the container.
 - `FUTU_ACCOUNT_ID` or `FUTU_ACCOUNT_PWD_MD5` is wrong.
-- `~/futu-opend/futu.pem` was changed after the container session was created.
-- Port `11111` is not mapped to `127.0.0.1`.
+- The OpenD container was started with Docker bridge networking instead of
+  `--network host`.
+- `FUTU_OPEND_IP` is not `127.0.0.1` when using host networking.
 
 If SMS is required:
 
@@ -254,7 +257,7 @@ Create a runner script:
 
 ```sh
 mkdir -p ~/.local/bin
-nano ~/.local/bin/algo-trading-run
+vim ~/.local/bin/algo-trading-run
 ```
 
 Script content:
@@ -290,7 +293,7 @@ Create the systemd user service:
 
 ```sh
 mkdir -p ~/.config/systemd/user
-nano ~/.config/systemd/user/algo-trading.service
+vim ~/.config/systemd/user/algo-trading.service
 ```
 
 ```ini
@@ -307,7 +310,7 @@ WorkingDirectory=%h/projects/algo-trading
 Create the timer:
 
 ```sh
-nano ~/.config/systemd/user/algo-trading.timer
+vim ~/.config/systemd/user/algo-trading.timer
 ```
 
 ```ini

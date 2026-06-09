@@ -38,6 +38,9 @@ Place simulated orders:
 uv run python main.py --cash 10000 --execute
 ```
 
+Orders are submitted as market orders by default. Use `--order-type NORMAL` to
+submit normal limit orders using the planned price.
+
 Run guarded automation:
 
 ```sh

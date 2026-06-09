@@ -411,7 +411,7 @@ def place_orders(
     trd_env: str = TrdEnv.SIMULATE,
     password: str | None = None,
     password_md5: str | None = None,
-    order_type: str = OrderType.NORMAL,
+    order_type: str = OrderType.MARKET,
 ) -> list[dict[str, object]]:
     if not plan:
         return []

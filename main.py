@@ -16,7 +16,7 @@ from futu import OrderType, TrdEnv
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=10)
-    parser.add_argument("--cash", type=float, default=10_000)
+    parser.add_argument("--cash", type=float, default=1_000_000)
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
     parser.add_argument("--plan", action="store_true")
@@ -38,7 +38,7 @@ def main() -> None:
     parser.add_argument(
         "--order-type",
         choices=[OrderType.MARKET, OrderType.NORMAL],
-        default=OrderType.NORMAL,
+        default=OrderType.MARKET,
     )
     args = parser.parse_args()
 

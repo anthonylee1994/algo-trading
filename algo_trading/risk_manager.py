@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import socket
 from dataclasses import asdict
 from datetime import UTC, date, datetime
 from pathlib import Path
@@ -26,6 +27,10 @@ OPEN_ORDER_STATUSES = {
     OrderStatus.SUBMITTED,
     OrderStatus.FILLED_PART,
 }
+FUTU_CONNECTION_HINT = (
+    "Check that Futu OpenD is running, logged in, listening on the configured "
+    "host/port, and using the same RSA key expected by the Docker container."
+)
 
 
 def load_journal(path: Path = JOURNAL_PATH) -> dict[str, Any]:
@@ -67,6 +72,16 @@ def _to_float(value: Any) -> float:
         return 0.0
 
 
+def check_futu_connection(host: str, port: int, timeout: float = 5.0) -> None:
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return
+    except OSError as exc:
+        raise RuntimeError(
+            f"Cannot connect to Futu OpenD at {host}:{port}. {FUTU_CONNECTION_HINT}"
+        ) from exc
+
+
 def _query_account_info(
     host: str,
     port: int,
@@ -88,6 +103,12 @@ def _query_account_info(
         if data.empty:
             return None
         return data.iloc[0]
+    except RuntimeError:
+        raise
+    except Exception as exc:
+        raise RuntimeError(
+            f"Futu account info query failed at {host}:{port}. {FUTU_CONNECTION_HINT}"
+        ) from exc
     finally:
         trade_ctx.close()
 

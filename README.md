@@ -2,6 +2,8 @@
 
 Daily US stock strategy based on `us-stock.md`.
 
+See [DEPLOY.md](DEPLOY.md) for server deployment with Futu OpenD Docker.
+
 The first filter layer uses `finvizfinance` instead of hard-coded valuation
 targets. It runs this Finviz screen:
 

@@ -5,6 +5,7 @@ from algo_trading.finviz_screener import fetch_candidates, summarize_candidates
 from algo_trading.futu_trader import build_strategy_plan, place_orders
 from algo_trading.risk_manager import (
     cancel_open_orders,
+    check_futu_connection,
     get_account_summary,
     record_cancel_results,
     record_order_results,
@@ -19,6 +20,7 @@ def main() -> None:
     parser.add_argument("--cash", type=float, default=1_000_000)
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
+    parser.add_argument("--check-futu", action="store_true")
     parser.add_argument("--plan", action="store_true")
     parser.add_argument("--execute", action="store_true")
     parser.add_argument("--auto", action="store_true")
@@ -41,6 +43,21 @@ def main() -> None:
         default=OrderType.MARKET,
     )
     args = parser.parse_args()
+
+    if args.check_futu:
+        trd_env = TrdEnv.REAL if args.real else TrdEnv.SIMULATE
+        check_futu_connection(host=args.futu_host, port=args.futu_port)
+        print({"futu_socket": "ok", "host": args.futu_host, "port": args.futu_port})
+        print(
+            {
+                "futu_account": get_account_summary(
+                    host=args.futu_host,
+                    port=args.futu_port,
+                    trd_env=trd_env,
+                )
+            }
+        )
+        return
 
     candidates = fetch_candidates()
     candidates = candidates.head(args.limit)

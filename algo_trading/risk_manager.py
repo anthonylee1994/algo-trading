@@ -276,11 +276,41 @@ def _is_submitted_trade_order(order: dict[str, Any]) -> bool:
     return bool(result.get("order_id"))
 
 
+def _order_ids_from_journal_entry(order: dict[str, Any]) -> set[str]:
+    order_ids: set[str] = set()
+    if order.get("order_id") is not None:
+        order_ids.add(str(order["order_id"]))
+
+    result = order.get("result")
+    if not isinstance(result, dict):
+        return order_ids
+
+    if result.get("order_id") is not None:
+        order_ids.add(str(result["order_id"]))
+
+    nested = result.get("result")
+    if isinstance(nested, list):
+        for item in nested:
+            if isinstance(item, dict) and item.get("order_id") is not None:
+                order_ids.add(str(item["order_id"]))
+
+    return order_ids
+
+
 def _today_risk_orders(journal: dict[str, Any]) -> list[dict[str, Any]]:
+    today_orders = _today_journal_orders(journal)
+    cancelled_order_ids = {
+        order_id
+        for order in today_orders
+        if order.get("action") == "CANCEL"
+        for order_id in _order_ids_from_journal_entry(order)
+    }
+
     return [
         order
-        for order in _today_journal_orders(journal)
+        for order in today_orders
         if _is_submitted_trade_order(order)
+        and not (_order_ids_from_journal_entry(order) & cancelled_order_ids)
     ]
 
 

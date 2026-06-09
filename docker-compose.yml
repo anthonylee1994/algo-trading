@@ -1,0 +1,15 @@
+services:
+  futu-opend:
+    image: ghcr.io/manhinhang/futu-opend-docker:ubuntu-stable
+    container_name: futu-opend-docker
+    restart: unless-stopped
+    network_mode: host
+    env_file:
+      - .env
+    volumes:
+      - ${FUTU_OPEND_RSA_MOUNT:-/root/futu-opend/futu.pem}:/.futu/futu.pem
+      - futu-opend-data:/home/futu/.com.futunn.FutuOpenD
+
+volumes:
+  futu-opend-data:
+    name: futu-opend-data

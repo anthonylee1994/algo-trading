@@ -7,11 +7,11 @@ Server deployment uses two parts:
 
 ## 1. Prepare The Server
 
-Install Docker, Git, and `uv`.
+Install Docker, Docker Compose, Git, and `uv`.
 
 ```sh
 sudo apt-get update
-sudo apt-get install -y ca-certificates curl git docker.io inetutils-telnet openssl
+sudo apt-get install -y ca-certificates curl git docker.io docker-compose inetutils-telnet openssl
 curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
@@ -24,31 +24,44 @@ sudo usermod -aG docker "$USER"
 
 Log out and back in after adding your user to the `docker` group.
 
-## 2. Run Futu OpenD
+## 2. Deploy The App
 
-Pull the OpenD image:
+Clone the repo:
 
 ```sh
-docker pull ghcr.io/manhinhang/futu-opend-docker:ubuntu-stable
+mkdir -p ~/projects
+cd ~/projects
+git clone <REPO_URL> algo-trading
+cd algo-trading
 ```
 
-Create an RSA key for OpenD:
+Install dependencies:
+
+```sh
+uv sync
+```
+
+Create an RSA key for OpenD. This key is mounted into the container and is also
+kept on the host for the optional encrypted API fallback.
 
 ```sh
 mkdir -p ~/futu-opend
 openssl genrsa -out ~/futu-opend/futu.pem 1024
 ```
 
-Create an env file for the OpenD container:
+Create the runtime env file:
 
 ```sh
-vim ~/futu-opend/.env
+cp .env.example .env
+vim .env
 ```
 
 ```sh
 FUTU_ACCOUNT_ID=replace-me
 FUTU_ACCOUNT_PWD_MD5=replace-me
 FUTU_OPEND_IP=127.0.0.1
+FUTU_TRADE_PASSWORD=replace-me
+FUTU_OPEND_RSA_MOUNT=/root/futu-opend/futu.pem
 ```
 
 Compute the password MD5 on Linux:
@@ -57,27 +70,26 @@ Compute the password MD5 on Linux:
 echo -n 'your-futu-password' | md5sum | awk '{print $1}'
 ```
 
-Start OpenD. Use host networking so the host app connects as `127.0.0.1`;
+Keep `.env` out of Git.
+
+## 3. Run Futu OpenD
+
+Start OpenD. `docker-compose.yml` uses host networking so the host app connects
+as `127.0.0.1`;
 otherwise OpenD treats trade API calls as cross-network traffic and requires
 protocol encryption. The named volume keeps the login session across container
 recreates, so SMS verification is usually only needed on first run, account
 switch, or when Futu invalidates the device whitelist.
 
 ```sh
-docker run -d \
-  --name futu-opend-docker \
-  --restart unless-stopped \
-  --network host \
-  --env-file ~/futu-opend/.env \
-  -v ~/futu-opend/futu.pem:/.futu/futu.pem \
-  -v futu-opend-data:/home/futu/.com.futunn.FutuOpenD \
-  ghcr.io/manhinhang/futu-opend-docker:ubuntu-stable
+docker-compose pull futu-opend
+docker-compose up -d futu-opend
 ```
 
 Check logs:
 
 ```sh
-docker logs -f futu-opend-docker
+docker-compose logs -f futu-opend
 ```
 
 Check health:
@@ -100,38 +112,7 @@ echo "input_pic_verify_code -code=abcd" | telnet localhost 22222
 ```
 
 Finish any required OpenD login/configuration before running real trades. Keep
-`~/futu-opend/.env` and `~/futu-opend/futu.pem` private.
-
-## 3. Deploy The App
-
-Clone the repo:
-
-```sh
-mkdir -p ~/projects
-cd ~/projects
-git clone <REPO_URL> algo-trading
-cd algo-trading
-```
-
-Install dependencies:
-
-```sh
-uv sync
-```
-
-Create the runtime env file:
-
-```sh
-cp .env.example .env
-```
-
-If `.env.example` does not exist yet, create `.env` manually:
-
-```sh
-FUTU_TRADE_PASSWORD=replace-me
-```
-
-Keep `.env` out of Git.
+`.env` and `~/futu-opend/futu.pem` private.
 
 ## 4. Smoke Test
 
@@ -200,7 +181,7 @@ info, check OpenD before changing strategy code:
 
 ```sh
 docker ps --filter name=futu-opend-docker
-docker logs --tail 100 futu-opend-docker
+docker-compose logs --tail 100 futu-opend
 ```
 
 Confirm the host can reach OpenD:
@@ -357,16 +338,17 @@ systemctl --user restart algo-trading.timer
 If OpenD needs an image update:
 
 ```sh
-docker pull ghcr.io/manhinhang/futu-opend-docker:ubuntu-stable
-docker stop futu-opend-docker
-docker rm futu-opend-docker
+docker-compose pull futu-opend
+docker-compose up -d futu-opend
 ```
 
-Then start it again using the `docker run` command above.
+Compose recreates the container when the image changes.
 
 To force a fresh OpenD login, remove the data volume after stopping the
 container:
 
 ```sh
+docker-compose down
 docker volume rm futu-opend-data
+docker-compose up -d futu-opend
 ```

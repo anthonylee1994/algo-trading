@@ -20,7 +20,7 @@ def main() -> None:
     parser.add_argument("--cash", type=float, default=1_000_000)
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
-    parser.add_argument("--futu-rsa-file", default=os.getenv("FUTU_OPEND_RSA_FILE"))
+    parser.add_argument("--futu-rsa-file", default=os.getenv("FUTU_API_RSA_FILE"))
     parser.add_argument("--check-futu", action="store_true")
     parser.add_argument("--plan", action="store_true")
     parser.add_argument("--execute", action="store_true")

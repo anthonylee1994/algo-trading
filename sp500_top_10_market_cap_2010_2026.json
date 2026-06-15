@@ -1,0 +1,895 @@
+{
+  "metadata": {
+    "definition": "Top 10 S&P 500 companies by market capitalization for each year. 2010-2025 are year-end snapshots; 2026 is the latest snapshot available from the source.",
+    "source": "https://www.finhacker.cz/en/top-20-sp-500-companies-by-market-cap/",
+    "source_note": "FinHacker states the page is based on EDGAR SEC Filings, YCharts, Bloomberg and Yahoo Finance.",
+    "as_of": "2026-06-12 16:00 ET for 2026 snapshot",
+    "retrieved_at": "2026-06-15"
+  },
+  "data": {
+    "2010": [
+      {
+        "rank": 1,
+        "market_cap": "364.06B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 2,
+        "market_cap": "297.10B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "234.53B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "198.03B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 5,
+        "market_cap": "192.17B",
+        "symbol": "WMT"
+      },
+      {
+        "rank": 6,
+        "market_cap": "190.85B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 7,
+        "market_cap": "183.14B",
+        "symbol": "CVX"
+      },
+      {
+        "rank": 8,
+        "market_cap": "180.19B",
+        "symbol": "PG"
+      },
+      {
+        "rank": 9,
+        "market_cap": "172.14B",
+        "symbol": "IBM"
+      },
+      {
+        "rank": 10,
+        "market_cap": "169.84B",
+        "symbol": "JNJ"
+      }
+    ],
+    "2011": [
+      {
+        "rank": 1,
+        "market_cap": "406.25B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 2,
+        "market_cap": "377.52B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "218.38B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "211.84B",
+        "symbol": "CVX"
+      },
+      {
+        "rank": 5,
+        "market_cap": "209.15B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 6,
+        "market_cap": "207.07B",
+        "symbol": "IBM"
+      },
+      {
+        "rank": 7,
+        "market_cap": "204.58B",
+        "symbol": "WMT"
+      },
+      {
+        "rank": 8,
+        "market_cap": "188.92B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 9,
+        "market_cap": "183.52B",
+        "symbol": "PG"
+      },
+      {
+        "rank": 10,
+        "market_cap": "179.10B",
+        "symbol": "JNJ"
+      }
+    ],
+    "2012": [
+      {
+        "rank": 1,
+        "market_cap": "499.67B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "389.65B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 3,
+        "market_cap": "233.48B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "228.34B",
+        "symbol": "WMT"
+      },
+      {
+        "rank": 5,
+        "market_cap": "223.67B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 6,
+        "market_cap": "221.02B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 7,
+        "market_cap": "210.55B",
+        "symbol": "CVX"
+      },
+      {
+        "rank": 8,
+        "market_cap": "204.37B",
+        "symbol": "IBM"
+      },
+      {
+        "rank": 9,
+        "market_cap": "194.74B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 10,
+        "market_cap": "185.48B",
+        "symbol": "PG"
+      }
+    ],
+    "2013": [
+      {
+        "rank": 1,
+        "market_cap": "500.71B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "438.70B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 3,
+        "market_cap": "376.36B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "310.50B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 5,
+        "market_cap": "292.37B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 6,
+        "market_cap": "258.38B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 7,
+        "market_cap": "254.61B",
+        "symbol": "WMT"
+      },
+      {
+        "rank": 8,
+        "market_cap": "239.08B",
+        "symbol": "CVX"
+      },
+      {
+        "rank": 9,
+        "market_cap": "238.67B",
+        "symbol": "WFC"
+      },
+      {
+        "rank": 10,
+        "market_cap": "220.70B",
+        "symbol": "PG"
+      }
+    ],
+    "2014": [
+      {
+        "rank": 1,
+        "market_cap": "643.24B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "388.38B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 3,
+        "market_cap": "381.73B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "369.97B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 5,
+        "market_cap": "361.38B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 6,
+        "market_cap": "291.02B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 7,
+        "market_cap": "283.42B",
+        "symbol": "WFC"
+      },
+      {
+        "rank": 8,
+        "market_cap": "276.82B",
+        "symbol": "WMT"
+      },
+      {
+        "rank": 9,
+        "market_cap": "246.03B",
+        "symbol": "PG"
+      },
+      {
+        "rank": 10,
+        "market_cap": "232.48B",
+        "symbol": "JPM"
+      }
+    ],
+    "2015": [
+      {
+        "rank": 1,
+        "market_cap": "583.67B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "534.88B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "439.68B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "325.48B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 5,
+        "market_cap": "323.96B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 6,
+        "market_cap": "318.34B",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 7,
+        "market_cap": "296.61B",
+        "symbol": "META"
+      },
+      {
+        "rank": 8,
+        "market_cap": "284.23B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 9,
+        "market_cap": "276.80B",
+        "symbol": "WFC"
+      },
+      {
+        "rank": 10,
+        "market_cap": "241.87B",
+        "symbol": "JPM"
+      }
+    ],
+    "2016": [
+      {
+        "rank": 1,
+        "market_cap": "608.92B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "546.00B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "483.14B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "401.91B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 5,
+        "market_cap": "374.31B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 6,
+        "market_cap": "356.30B",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 7,
+        "market_cap": "331.57B",
+        "symbol": "META"
+      },
+      {
+        "rank": 8,
+        "market_cap": "313.49B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 9,
+        "market_cap": "308.75B",
+        "symbol": "JPM"
+      },
+      {
+        "rank": 10,
+        "market_cap": "276.76B",
+        "symbol": "WFC"
+      }
+    ],
+    "2017": [
+      {
+        "rank": 1,
+        "market_cap": "860.96B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "732.11B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "659.94B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "563.51B",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 5,
+        "market_cap": "512.79B",
+        "symbol": "META"
+      },
+      {
+        "rank": 6,
+        "market_cap": "489.01B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 7,
+        "market_cap": "375.43B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 8,
+        "market_cap": "371.08B",
+        "symbol": "JPM"
+      },
+      {
+        "rank": 9,
+        "market_cap": "354.38B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 10,
+        "market_cap": "307.89B",
+        "symbol": "BAC"
+      }
+    ],
+    "2018": [
+      {
+        "rank": 1,
+        "market_cap": "780.36B",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 2,
+        "market_cap": "746.11B",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "737.47B",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 4,
+        "market_cap": "726.77B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 5,
+        "market_cap": "502.49B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 6,
+        "market_cap": "374.13B",
+        "symbol": "META"
+      },
+      {
+        "rank": 7,
+        "market_cap": "343.53B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 8,
+        "market_cap": "319.80B",
+        "symbol": "JPM"
+      },
+      {
+        "rank": 9,
+        "market_cap": "289.21B",
+        "symbol": "V"
+      },
+      {
+        "rank": 10,
+        "market_cap": "288.92B",
+        "symbol": "XOM"
+      }
+    ],
+    "2019": [
+      {
+        "rank": 1,
+        "market_cap": "1.288T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "1.200T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 3,
+        "market_cap": "922.17B",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "920.22B",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 5,
+        "market_cap": "585.37B",
+        "symbol": "META"
+      },
+      {
+        "rank": 6,
+        "market_cap": "551.98B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 7,
+        "market_cap": "429.91B",
+        "symbol": "JPM"
+      },
+      {
+        "rank": 8,
+        "market_cap": "402.67B",
+        "symbol": "V"
+      },
+      {
+        "rank": 9,
+        "market_cap": "384.08B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 10,
+        "market_cap": "337.19B",
+        "symbol": "WMT"
+      }
+    ],
+    "2020": [
+      {
+        "rank": 1,
+        "market_cap": "2.232T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "1.678T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 3,
+        "market_cap": "1.638T",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 4,
+        "market_cap": "1.183T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 5,
+        "market_cap": "778.23B",
+        "symbol": "META"
+      },
+      {
+        "rank": 6,
+        "market_cap": "677.44B",
+        "symbol": "TSLA"
+      },
+      {
+        "rank": 7,
+        "market_cap": "537.01B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 8,
+        "market_cap": "465.89B",
+        "symbol": "V"
+      },
+      {
+        "rank": 9,
+        "market_cap": "414.38B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 10,
+        "market_cap": "407.85B",
+        "symbol": "WMT"
+      }
+    ],
+    "2021": [
+      {
+        "rank": 1,
+        "market_cap": "2.902T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "2.522T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 3,
+        "market_cap": "1.918T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "1.697T",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 5,
+        "market_cap": "1.092T",
+        "symbol": "TSLA"
+      },
+      {
+        "rank": 6,
+        "market_cap": "921.94B",
+        "symbol": "META"
+      },
+      {
+        "rank": 7,
+        "market_cap": "735.27B",
+        "symbol": "NVDA"
+      },
+      {
+        "rank": 8,
+        "market_cap": "662.58B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 9,
+        "market_cap": "472.51B",
+        "symbol": "UNH"
+      },
+      {
+        "rank": 10,
+        "market_cap": "466.18B",
+        "symbol": "JPM"
+      }
+    ],
+    "2022": [
+      {
+        "rank": 1,
+        "market_cap": "2.067T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "1.788T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 3,
+        "market_cap": "1.148T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "856.8B",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 5,
+        "market_cap": "678.65B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 6,
+        "market_cap": "495.37B",
+        "symbol": "UNH"
+      },
+      {
+        "rank": 7,
+        "market_cap": "461.76B",
+        "symbol": "JNJ"
+      },
+      {
+        "rank": 8,
+        "market_cap": "454.22B",
+        "symbol": "XOM"
+      },
+      {
+        "rank": 9,
+        "market_cap": "432.35B",
+        "symbol": "V"
+      },
+      {
+        "rank": 10,
+        "market_cap": "393.32B",
+        "symbol": "JPM"
+      }
+    ],
+    "2023": [
+      {
+        "rank": 1,
+        "market_cap": "2.994T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "2.795T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 3,
+        "market_cap": "1.764T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "1.570T",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 5,
+        "market_cap": "1.223T",
+        "symbol": "NVDA"
+      },
+      {
+        "rank": 6,
+        "market_cap": "909.68B",
+        "symbol": "META"
+      },
+      {
+        "rank": 7,
+        "market_cap": "789.92B",
+        "symbol": "TSLA"
+      },
+      {
+        "rank": 8,
+        "market_cap": "772.53B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 9,
+        "market_cap": "553.37B",
+        "symbol": "LLY"
+      },
+      {
+        "rank": 10,
+        "market_cap": "525.65B",
+        "symbol": "V"
+      }
+    ],
+    "2024": [
+      {
+        "rank": 1,
+        "market_cap": "3.766T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 2,
+        "market_cap": "3.289T",
+        "symbol": "NVDA"
+      },
+      {
+        "rank": 3,
+        "market_cap": "3.134T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 4,
+        "market_cap": "2.325T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 5,
+        "market_cap": "2.323T",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 6,
+        "market_cap": "1.484T",
+        "symbol": "META"
+      },
+      {
+        "rank": 7,
+        "market_cap": "1.299T",
+        "symbol": "TSLA"
+      },
+      {
+        "rank": 8,
+        "market_cap": "1.087T",
+        "symbol": "AVGO"
+      },
+      {
+        "rank": 9,
+        "market_cap": "977.72B",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 10,
+        "market_cap": "725.78B",
+        "symbol": "WMT"
+      }
+    ],
+    "2025": [
+      {
+        "rank": 1,
+        "market_cap": "4.533T",
+        "symbol": "NVDA"
+      },
+      {
+        "rank": 2,
+        "market_cap": "4.017T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "3.777T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "3.594T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 5,
+        "market_cap": "2.468T",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 6,
+        "market_cap": "1.664T",
+        "symbol": "META"
+      },
+      {
+        "rank": 7,
+        "market_cap": "1.641T",
+        "symbol": "AVGO"
+      },
+      {
+        "rank": 8,
+        "market_cap": "1.496T",
+        "symbol": "TSLA"
+      },
+      {
+        "rank": 9,
+        "market_cap": "1.084T",
+        "symbol": "BRK.B"
+      },
+      {
+        "rank": 10,
+        "market_cap": "961.86B",
+        "symbol": "LLY"
+      }
+    ],
+    "2026": [
+      {
+        "rank": 1,
+        "market_cap": "4.970T",
+        "symbol": "NVDA"
+      },
+      {
+        "rank": 2,
+        "market_cap": "4.358T",
+        "symbol": "GOOGL"
+      },
+      {
+        "rank": 3,
+        "market_cap": "4.270T",
+        "symbol": "AAPL"
+      },
+      {
+        "rank": 4,
+        "market_cap": "2.903T",
+        "symbol": "MSFT"
+      },
+      {
+        "rank": 5,
+        "market_cap": "2.565T",
+        "symbol": "AMZN"
+      },
+      {
+        "rank": 6,
+        "market_cap": "1.818T",
+        "symbol": "AVGO"
+      },
+      {
+        "rank": 7,
+        "market_cap": "1.526T",
+        "symbol": "TSLA"
+      },
+      {
+        "rank": 8,
+        "market_cap": "1.439T",
+        "symbol": "META"
+      },
+      {
+        "rank": 9,
+        "market_cap": "1.107T",
+        "symbol": "MU"
+      },
+      {
+        "rank": 10,
+        "market_cap": "1.069T",
+        "symbol": "LLY"
+      }
+    ]
+  }
+}

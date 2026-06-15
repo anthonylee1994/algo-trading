@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 import json
 from pathlib import Path
 import sys
+from urllib.error import HTTPError
 import urllib.parse
 import urllib.request
 
@@ -15,16 +16,26 @@ import pandas as pd
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from algo_trading.momentum_rotation import (
-    DEFAULT_SYMBOLS,
     format_bordered_table,
     format_momentum_score_table,
     latest_momentum_score_table,
+)
+from algo_trading.market_cap_universe import (
+    DEFAULT_MARKET_CAP_UNIVERSE_PATH,
+    latest_universe_symbols,
+    load_yearly_market_cap_universe,
+    symbols_for_date,
 )
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
+    parser.add_argument("--symbols", nargs="+", default=None)
+    parser.add_argument(
+        "--universe-json",
+        default=str(DEFAULT_MARKET_CAP_UNIVERSE_PATH),
+        help="每年 S&P 500 市值 Top 10 universe JSON；如指定 --symbols 就會改用固定 universe。",
+    )
     parser.add_argument("--benchmark", default="QQQ")
     parser.add_argument("--start", default="2010-01-01")
     parser.add_argument("--end", default=None)
@@ -62,36 +73,43 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    symbols = list(dict.fromkeys([*args.symbols, args.benchmark]))
+    universe_by_year = None
+    if args.symbols:
+        strategy_symbols = list(dict.fromkeys(args.symbols))
+        data_symbols = strategy_symbols
+        universe_label = "固定 universe"
+    else:
+        universe_by_year = load_yearly_market_cap_universe(Path(args.universe_json))
+        data_symbols = sorted(
+            {symbol for symbols in universe_by_year.values() for symbol in symbols}
+        )
+        strategy_symbols = data_symbols
+        universe_label = f"每年 S&P 500 市值 Top 10（{args.universe_json}）"
+
+    symbols = list(dict.fromkeys([*data_symbols, args.benchmark]))
     charts = {
-        symbol: fetch_yahoo_chart(symbol, args.start, args.end)
-        for symbol in symbols
+        symbol: fetch_yahoo_chart(symbol, args.start, args.end) for symbol in symbols
     }
     close_prices = pd.concat(
-        [
-            charts[symbol]["adj_close"].rename(symbol)
-            for symbol in symbols
-        ],
+        [charts[symbol]["adj_close"].rename(symbol) for symbol in symbols],
         axis=1,
         join="outer",
     ).sort_index()
     close_prices.index = pd.to_datetime(close_prices.index)
     raw_close_prices = pd.concat(
-        [
-            charts[symbol]["close"].rename(symbol)
-            for symbol in symbols
-        ],
+        [charts[symbol]["close"].rename(symbol) for symbol in symbols],
         axis=1,
         join="outer",
     ).sort_index()
     raw_close_prices.index = pd.to_datetime(raw_close_prices.index)
 
-    print_data_coverage(close_prices, args.symbols, args.start)
+    print_data_coverage(close_prices, strategy_symbols, args.start)
 
     if args.sweep_lookback:
         run_lookback_sweep(
             close_prices=close_prices,
-            symbols=args.symbols,
+            symbols=strategy_symbols,
+            universe_by_year=universe_by_year,
             benchmark_symbol=args.benchmark,
             initial_cash=args.initial_cash,
             top_n=args.top_n,
@@ -103,7 +121,8 @@ def main() -> None:
 
     weights = build_target_weights(
         close_prices=close_prices,
-        symbols=args.symbols,
+        symbols=strategy_symbols,
+        universe_by_year=universe_by_year,
         lookback_days=args.lookback_days,
         top_n=args.top_n,
     )
@@ -132,7 +151,8 @@ def main() -> None:
     )
 
     print(f"Momentum rotation 回測（{summary['start']} 至 {summary['end']}）")
-    print(f"交易範圍：{', '.join(args.symbols)}")
+    print(f"交易範圍：{universe_label}")
+    print(f"資料 symbols：{', '.join(strategy_symbols)}")
     print(f"持倉數量：Top {args.top_n}")
     print(f"重新平衡：{args.rebalance}；每次成交成本：{args.cost_bps:.1f} bps")
     print(f"最終資產：${summary['final_equity']:,.2f}")
@@ -147,12 +167,13 @@ def main() -> None:
     print(f"長揸最大回撤：{summary['benchmark_max_drawdown_pct']:.2f}%")
     print()
     print("最新 momentum 分數：")
+    latest_symbols = latest_universe_symbols(strategy_symbols, universe_by_year)
     print(
         format_momentum_score_table(
             latest_momentum_score_table(
-                close_prices,
+                close_prices.loc[:, latest_symbols],
                 args.lookback_days,
-                latest_close_prices=raw_close_prices,
+                latest_close_prices=raw_close_prices.loc[:, latest_symbols],
             )
         )
     )
@@ -180,13 +201,18 @@ def build_target_weights(
     symbols: list[str],
     lookback_days: int,
     top_n: int = 1,
+    universe_by_year: dict[int, list[str]] | None = None,
 ) -> pd.DataFrame:
     symbols = list(dict.fromkeys(symbols))
     momentum = close_prices.loc[:, symbols].pct_change(lookback_days)
     weights = pd.DataFrame(0.0, index=close_prices.index, columns=symbols)
     top_n = max(top_n, 1)
     for date, row in momentum.iterrows():
-        ranking = row.dropna().sort_values(ascending=False)
+        universe_symbols = symbols_for_date(date, symbols, universe_by_year)
+        ranking = row.loc[
+            [symbol for symbol in universe_symbols if symbol in row.index]
+        ]
+        ranking = ranking.dropna().sort_values(ascending=False)
         ranking = ranking[ranking > 0]
         if ranking.empty:
             continue
@@ -279,7 +305,9 @@ def build_backtest_summary(
     initial_cash: float,
 ) -> dict[str, float | int | str]:
     strategy_name = "Momentum Rotation"
-    benchmark_name = next(name for name in bt_result.prices.columns if name != strategy_name)
+    benchmark_name = next(
+        name for name in bt_result.prices.columns if name != strategy_name
+    )
     strategy_prices = bt_result.prices[strategy_name].dropna()
     benchmark_prices = bt_result.prices[benchmark_name].dropna()
     stats = bt_result.stats
@@ -291,10 +319,14 @@ def build_backtest_summary(
         "cagr_pct": float(stats.loc["cagr", strategy_name]) * 100,
         "max_drawdown_pct": float(stats.loc["max_drawdown", strategy_name]) * 100,
         "trade_count": 0,
-        "benchmark_final_equity": _bt_price_to_equity(benchmark_prices.iloc[-1], initial_cash),
-        "benchmark_total_return_pct": float(stats.loc["total_return", benchmark_name]) * 100,
+        "benchmark_final_equity": _bt_price_to_equity(
+            benchmark_prices.iloc[-1], initial_cash
+        ),
+        "benchmark_total_return_pct": float(stats.loc["total_return", benchmark_name])
+        * 100,
         "benchmark_cagr_pct": float(stats.loc["cagr", benchmark_name]) * 100,
-        "benchmark_max_drawdown_pct": float(stats.loc["max_drawdown", benchmark_name]) * 100,
+        "benchmark_max_drawdown_pct": float(stats.loc["max_drawdown", benchmark_name])
+        * 100,
     }
 
 
@@ -317,8 +349,12 @@ def build_curve(
     previous_symbols: list[str] = []
     for date in equity.index:
         current_symbols = _symbols_from_weight_row(weights.loc[date])
-        bought_symbols = [symbol for symbol in current_symbols if symbol not in previous_symbols]
-        sold_symbols = [symbol for symbol in previous_symbols if symbol not in current_symbols]
+        bought_symbols = [
+            symbol for symbol in current_symbols if symbol not in previous_symbols
+        ]
+        sold_symbols = [
+            symbol for symbol in previous_symbols if symbol not in current_symbols
+        ]
         rows.append(
             {
                 "date": date.date().isoformat(),
@@ -351,7 +387,9 @@ def _format_symbols(symbols: list[str]) -> str:
     return ", ".join(symbols) if symbols else "CASH"
 
 
-def _max_momentum(values: pd.DataFrame, date: pd.Timestamp, symbols: list[str]) -> float:
+def _max_momentum(
+    values: pd.DataFrame, date: pd.Timestamp, symbols: list[str]
+) -> float:
     if not symbols or date not in values.index:
         return float("nan")
     row = values.loc[date, [symbol for symbol in symbols if symbol in values.columns]]
@@ -474,6 +512,7 @@ def print_data_coverage(
 def run_lookback_sweep(
     close_prices: pd.DataFrame,
     symbols: list[str],
+    universe_by_year: dict[int, list[str]] | None,
     benchmark_symbol: str,
     initial_cash: float,
     top_n: int,
@@ -482,12 +521,15 @@ def run_lookback_sweep(
     lookbacks: list[int],
 ) -> None:
     """跑多個 lookback，睇下表現對參數有幾敏感（過度擬合檢查）。"""
-    print(f"Lookback 敏感度分析（top_n={top_n}, rebalance={rebalance}, cost={cost_bps:.1f} bps）：")
+    print(
+        f"Lookback 敏感度分析（top_n={top_n}, rebalance={rebalance}, cost={cost_bps:.1f} bps）："
+    )
     rows = []
     for lookback in lookbacks:
         weights = build_target_weights(
             close_prices=close_prices,
             symbols=symbols,
+            universe_by_year=universe_by_year,
             lookback_days=lookback,
             top_n=top_n,
         )
@@ -520,6 +562,7 @@ def fetch_yahoo_history(symbol: str, start: str, end: str | None) -> pd.Series:
 
 
 def fetch_yahoo_chart(symbol: str, start: str, end: str | None) -> pd.DataFrame:
+    yahoo_symbol = yahoo_chart_symbol(symbol)
     period1 = _timestamp(start)
     period2 = _timestamp(end) if end else int(datetime.now(tz=UTC).timestamp())
     query = urllib.parse.urlencode(
@@ -531,10 +574,15 @@ def fetch_yahoo_chart(symbol: str, start: str, end: str | None) -> pd.DataFrame:
             "includeAdjustedClose": "true",
         }
     )
-    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?{query}"
+    url = f"https://query1.finance.yahoo.com/v8/finance/chart/{yahoo_symbol}?{query}"
     request = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
-    with urllib.request.urlopen(request, timeout=30) as response:
-        payload = json.load(response)
+    try:
+        with urllib.request.urlopen(request, timeout=30) as response:
+            payload = json.load(response)
+    except HTTPError as error:
+        raise RuntimeError(
+            f"{symbol} Yahoo 圖表數據 HTTP {error.code}（Yahoo symbol: {yahoo_symbol}）"
+        ) from error
 
     chart = payload.get("chart", {})
     if chart.get("error"):
@@ -554,6 +602,11 @@ def fetch_yahoo_chart(symbol: str, start: str, end: str | None) -> pd.DataFrame:
         },
         index=dates,
     ).dropna(subset=["close", "adj_close"])
+
+
+def yahoo_chart_symbol(symbol: str) -> str:
+    # Yahoo Finance 用 dash 表示 Berkshire B shares，策略/JSON 保留常見 ticker BRK.B。
+    return {"BRK.B": "BRK-B"}.get(symbol, symbol)
 
 
 def _timestamp(value: str | None) -> int:

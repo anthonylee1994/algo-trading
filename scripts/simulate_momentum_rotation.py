@@ -15,8 +15,12 @@ from algo_trading.futu_trader import (
     get_price_history,
     place_orders,
 )
+from algo_trading.market_cap_universe import (
+    DEFAULT_MARKET_CAP_UNIVERSE_PATH,
+    latest_universe_symbols,
+    load_yearly_market_cap_universe,
+)
 from algo_trading.momentum_rotation import (
-    DEFAULT_SYMBOLS,
     build_equal_weight_rotation_plan,
     format_momentum_score_table,
     momentum_score_table,
@@ -33,7 +37,12 @@ from algo_trading.risk_manager import (
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
+    parser.add_argument("--symbols", nargs="+", default=None)
+    parser.add_argument(
+        "--universe-json",
+        default=str(DEFAULT_MARKET_CAP_UNIVERSE_PATH),
+        help="最新 S&P 500 市值 Top 10 universe JSON；如指定 --symbols 就會改用固定 universe。",
+    )
     parser.add_argument("--lookback-days", type=int, default=126)
     parser.add_argument("--top-n", type=int, default=2)
     parser.add_argument("--futu-host", default="127.0.0.1")
@@ -56,8 +65,17 @@ def main() -> None:
         SysConfig.enable_proto_encrypt(True)
         SysConfig.set_init_rsa_file(args.futu_rsa_file)
 
+    if args.symbols:
+        strategy_symbols = list(dict.fromkeys(args.symbols))
+        universe_label = "固定 universe"
+    else:
+        universe_by_year = load_yearly_market_cap_universe(Path(args.universe_json))
+        latest_year = max(universe_by_year)
+        strategy_symbols = latest_universe_symbols([], universe_by_year)
+        universe_label = f"{latest_year} S&P 500 市值 Top 10（{args.universe_json}）"
+
     trd_env = TrdEnv.SIMULATE
-    codes = [futu_us_code(symbol) for symbol in args.symbols]
+    codes = [futu_us_code(symbol) for symbol in strategy_symbols]
     histories_by_code = get_price_history(
         host=args.futu_host,
         port=args.futu_port,
@@ -98,7 +116,7 @@ def main() -> None:
         prices=prices,
         positions=positions,
         available_cash=float(account["available_cash"]),
-        symbols=args.symbols,
+        symbols=strategy_symbols,
         min_trade_notional=args.min_trade_notional,
     )
 
@@ -108,6 +126,8 @@ def main() -> None:
             "訊號": ", ".join(str(target.ticker) for target in targets) or "現金",
             "momentum": [target.momentum for target in targets],
             "原因": f"Top {args.top_n} 等權 {args.lookback_days} 日 momentum",
+            "交易範圍": universe_label,
+            "symbols": strategy_symbols,
             "帳戶": account,
         }
     )

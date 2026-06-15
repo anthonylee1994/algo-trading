@@ -8,8 +8,10 @@
 
 交易 universe：
 
-- `CRM`, `MSFT`, `NVDA`, `HOOD`, `IBM`, `AMZN`, `AAPL`, `HON`, `COIN`, `META`,
-  `GOOG`, `TSM`, `ETN`, `JPM`, `IBKR`, `GEV`, `AVGO`, `NDAQ`, `AXP`, `MRK`
+- 模擬盤 dry-run / execute：預設用 `sp500_top_10_market_cap_2010_2026.json`
+  入面最新年份嘅 S&P 500 市值 Top 10。
+- Backtest：預設逐年切換，用每一年 S&P 500 市值 Top 10。
+- 想手動固定 universe，可以傳 `--symbols AAPL MSFT NVDA ...`。
 
 每日用 FUTU QFQ 日線計每隻股票 / ETF 嘅 126 日 momentum：
 
@@ -40,6 +42,12 @@ FUTU 模擬交易預設揀 momentum 最高嗰兩隻做等權：
 uv run python main.py
 ```
 
+預設會用最新年份市值 Top 10；想手動指定交易範圍：
+
+```sh
+uv run python main.py --symbols AAPL MSFT NVDA GOOGL AMZN META AVGO TSLA LLY WMT
+```
+
 想改返 Top 1 或試 Top 3：
 
 ```sh
@@ -55,7 +63,9 @@ uv run python main.py --top-n 3
 
 ## Backtest
 
-用 Yahoo adjusted close data + `bt` 跑同一條 Top 2 等權公式：
+用 Yahoo adjusted close data + `bt` 跑同一條 Top 2 等權公式。Backtest 預設會讀
+`sp500_top_10_market_cap_2010_2026.json`，每年只喺該年 S&P 500 市值最高嗰
+10 隻入面揀 momentum 最高嘅 `--top-n` 隻做交易：
 
 ```sh
 uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14 --output-csv output/backtest_trades.csv
@@ -66,6 +76,7 @@ uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 202
 - **無前視偏差**：用 `close[t]` 計嘅 momentum 信號會推遲一個交易日先成交（`weights.shift(1)`），唔會「用收市價計、又用同一個收市價成交」。
 - **有交易成本**：每次成交收 `--cost-bps`（預設 `15` = 0.15%，佣金 + 滑點）。設 `--cost-bps 0` 先係舊版嘅「零成本」幻覺。
 - **重新平衡頻率**：`--rebalance {daily,weekly,monthly}`，預設 `monthly`。Momentum rotation 高換手，daily rebalance 喺真錢交易會被成本食凸。
+- **動態 universe**：預設每個年份用該年 S&P 500 市值 Top 10。即係 2010 只會喺 2010 Top 10 入面揀，2026 就用 2026 snapshot。想返去舊式固定名單，可以傳 `--symbols AAPL MSFT NVDA ...`。
 - **倖存者偏差**：Yahoo 只有現存上市股票，已退市嘅唔會出現；啟動時會印出每隻 symbol 真實數據起始日，遲上市嘅會標 ⚠️。早年 universe 細咗 → 回報會偏高，自己打個折扣。
 - **過度擬合檢查**：用 `--sweep-lookback 63 126 252 504` 跑多個 lookback，睇 CAGR／回撤對參數有幾敏感。差距大 = 揀中嘅參數靠彩數。
 

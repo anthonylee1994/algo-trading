@@ -4,12 +4,7 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.14"
-dependencies = [
-    "futu-api>=10.7.6708",
-    "pytest>=9.0.3",
-]
+dependencies = ["bt>=1.2.0", "futu-api>=10.7.6708", "pytest>=9.1.0"]
 
 [tool.pytest.ini_options]
-pythonpath = [
-    ".",
-]
+pythonpath = ["."]

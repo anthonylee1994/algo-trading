@@ -45,7 +45,7 @@ uv run python main.py
 
 ## Backtest
 
-用 Yahoo adjusted close data 跑同一條公式：
+用 Yahoo adjusted close data + `bt` 跑同一條公式：
 
 ```sh
 uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14 --output-csv output/backtest_trades.csv
@@ -54,7 +54,13 @@ uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 202
 預設會輸出交易紀錄 CSV：
 
 ```text
-backtest_trades.csv
+output/backtest_trades.csv
+```
+
+同時會用 `bt` 輸出 equity curve 圖：
+
+```text
+output/backtest_chart.png
 ```
 
 想指定 output path：
@@ -63,7 +69,8 @@ backtest_trades.csv
 uv run python scripts/backtest_momentum_rotation.py \
   --start 2010-01-01 \
   --end 2026-06-14 \
-  --output-csv output/backtest_trades.csv
+  --output-csv output/backtest_trades.csv \
+  --plot-path output/backtest_chart.png
 ```
 
 可以改 benchmark，例如同 strong hold `MSFT` 比：

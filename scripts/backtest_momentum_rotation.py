@@ -32,6 +32,25 @@ def main() -> None:
     parser.add_argument("--top-n", type=int, default=2)
     parser.add_argument("--initial-cash", type=float, default=100_000)
     parser.add_argument(
+        "--rebalance",
+        choices=["daily", "weekly", "monthly"],
+        default="monthly",
+        help="重新平衡頻率；momentum rotation 高換手，預設用 monthly 壓低成本。",
+    )
+    parser.add_argument(
+        "--cost-bps",
+        type=float,
+        default=15.0,
+        help="每次成交嘅佣金 + 滑點（基點）；15 = 0.15%%。設 0 即無成本。",
+    )
+    parser.add_argument(
+        "--sweep-lookback",
+        nargs="+",
+        type=int,
+        default=None,
+        help="跑多個 lookback 做敏感度分析，例如 --sweep-lookback 63 126 252 504。",
+    )
+    parser.add_argument(
         "--output-csv",
         default="output/backtest_trades.csv",
         help="交易紀錄 CSV output path；用空字串可跳過輸出。",
@@ -67,6 +86,21 @@ def main() -> None:
     ).sort_index()
     raw_close_prices.index = pd.to_datetime(raw_close_prices.index)
 
+    print_data_coverage(close_prices, args.symbols, args.start)
+
+    if args.sweep_lookback:
+        run_lookback_sweep(
+            close_prices=close_prices,
+            symbols=args.symbols,
+            benchmark_symbol=args.benchmark,
+            initial_cash=args.initial_cash,
+            top_n=args.top_n,
+            cost_bps=args.cost_bps,
+            rebalance=args.rebalance,
+            lookbacks=args.sweep_lookback,
+        )
+        print()
+
     weights = build_target_weights(
         close_prices=close_prices,
         symbols=args.symbols,
@@ -78,6 +112,8 @@ def main() -> None:
         weights=weights,
         benchmark_symbol=args.benchmark,
         initial_cash=args.initial_cash,
+        cost_bps=args.cost_bps,
+        rebalance=args.rebalance,
     )
     summary = build_backtest_summary(
         bt_result=bt_result,
@@ -98,6 +134,7 @@ def main() -> None:
     print(f"Momentum rotation 回測（{summary['start']} 至 {summary['end']}）")
     print(f"交易範圍：{', '.join(args.symbols)}")
     print(f"持倉數量：Top {args.top_n}")
+    print(f"重新平衡：{args.rebalance}；每次成交成本：{args.cost_bps:.1f} bps")
     print(f"最終資產：${summary['final_equity']:,.2f}")
     print(f"總回報：{summary['total_return_pct']:.2f}%")
     print(f"年化回報：{summary['cagr_pct']:.2f}%")
@@ -157,7 +194,28 @@ def build_target_weights(
         weight = 1.0 / len(selected)
         for symbol in selected:
             weights.loc[date, str(symbol)] = weight
+    # 修正前視偏差：用 close[t] 計嘅信號，最快只可以喺 t+1 成交。
+    # 將目標倉位推遲一個交易日，避免「用收市價計、又用同一個收市價成交」。
+    weights = weights.shift(1).fillna(0.0)
     return weights
+
+
+def _run_frequency_algo(rebalance: str) -> bt.algos.Algo:
+    if rebalance == "weekly":
+        return bt.algos.RunWeekly()
+    if rebalance == "monthly":
+        return bt.algos.RunMonthly()
+    return bt.algos.RunDaily()
+
+
+def _make_commission(cost_bps: float):
+    """每次成交收 cost_bps 個基點（佣金 + 滑點）嘅成交金額。"""
+    rate = max(cost_bps, 0.0) / 10_000.0
+
+    def commission(quantity: float, price: float) -> float:
+        return abs(float(quantity) * float(price)) * rate
+
+    return commission
 
 
 def run_bt_backtest(
@@ -165,11 +223,14 @@ def run_bt_backtest(
     weights: pd.DataFrame,
     benchmark_symbol: str,
     initial_cash: float,
+    cost_bps: float = 15.0,
+    rebalance: str = "monthly",
 ) -> bt.backtest.Result:
+    commission = _make_commission(cost_bps)
     strategy = bt.Strategy(
         "Momentum Rotation",
         [
-            bt.algos.RunDaily(),
+            _run_frequency_algo(rebalance),
             bt.algos.WeighTarget(weights),
             bt.algos.Rebalance(),
         ],
@@ -181,7 +242,7 @@ def run_bt_backtest(
     benchmark_strategy = bt.Strategy(
         f"Buy Hold {benchmark_symbol}",
         [
-            bt.algos.RunDaily(),
+            _run_frequency_algo(rebalance),
             bt.algos.WeighTarget(benchmark_weights),
             bt.algos.Rebalance(),
         ],
@@ -192,12 +253,14 @@ def run_bt_backtest(
             close_prices,
             initial_capital=initial_cash,
             integer_positions=False,
+            commissions=commission,
         ),
         bt.Backtest(
             benchmark_strategy,
             close_prices.loc[:, [benchmark_symbol]],
             initial_capital=initial_cash,
             integer_positions=False,
+            commissions=commission,
         ),
     )
 
@@ -244,8 +307,11 @@ def build_curve(
 ) -> pd.DataFrame:
     strategy_prices = bt_result.prices["Momentum Rotation"].dropna()
     equity = strategy_prices.map(lambda value: _bt_price_to_equity(value, initial_cash))
-    equity = equity.reindex(weights.index).ffill().dropna()
-    weights = weights.reindex(equity.index).fillna(0)
+    equity = equity.reindex(strategy_prices.index).ffill().dropna()
+    # 用 bt 實際執行咗嘅持倉（已反映 rebalance 頻率），唔好用每日 target，
+    # 否則交易表會把每日信號變化全部當成成交，嚴重高估換手。
+    realized = bt_result.backtests["Momentum Rotation"].security_weights
+    weights = realized.reindex(equity.index).ffill().fillna(0)
     momentum = close_prices.pct_change(lookback_days).reindex(equity.index)
     rows = []
     previous_symbols: list[str] = []
@@ -272,11 +338,13 @@ def build_curve(
     return curve
 
 
-def _symbols_from_weight_row(row: pd.Series) -> list[str]:
-    if row.empty or float(row.max()) <= 0:
+def _symbols_from_weight_row(row: pd.Series, threshold: float = 1e-3) -> list[str]:
+    # 用門檻過濾 drift／浮點殘留，再以字母排序固定次序，
+    # 避免 realized weight 日日 drift 令排名互換而砌出假交易。
+    if row.empty:
         return []
-    selected = row[row > 0].sort_values(ascending=False)
-    return [str(symbol) for symbol in selected.index]
+    held = [str(symbol) for symbol, value in row.items() if float(value) > threshold]
+    return sorted(held)
 
 
 def _format_symbols(symbols: list[str]) -> str:
@@ -368,6 +436,83 @@ def _format_price(value: float) -> str:
     if pd.isna(value):
         return ""
     return f"{float(value):,.2f}"
+
+
+def print_data_coverage(
+    close_prices: pd.DataFrame,
+    symbols: list[str],
+    requested_start: str,
+) -> None:
+    """列出每隻 symbol 真實有數據嘅起始日，提醒倖存者偏差／歷史唔齊。"""
+    requested = pd.to_datetime(requested_start)
+    print("數據覆蓋範圍（Yahoo 只有現存上市股票，已退市嘅唔會出現）：")
+    late_starters = []
+    for symbol in list(dict.fromkeys(symbols)):
+        if symbol not in close_prices.columns:
+            print(f"  {symbol:<6} 無數據")
+            late_starters.append(symbol)
+            continue
+        series = close_prices[symbol].dropna()
+        if series.empty:
+            print(f"  {symbol:<6} 無數據")
+            late_starters.append(symbol)
+            continue
+        first = series.index[0]
+        flag = ""
+        if first > requested + pd.Timedelta(days=7):
+            flag = "  ⚠️ 遲過回測起點，早年唔會入選"
+            late_starters.append(symbol)
+        print(f"  {symbol:<6} {first.date().isoformat()}{flag}")
+    if late_starters:
+        print(
+            f"  ⚠️ {len(late_starters)} 隻 symbol 冇齊歷史："
+            f"早年 universe 細咗，回報會偏高，請當心解讀。"
+        )
+    print()
+
+
+def run_lookback_sweep(
+    close_prices: pd.DataFrame,
+    symbols: list[str],
+    benchmark_symbol: str,
+    initial_cash: float,
+    top_n: int,
+    cost_bps: float,
+    rebalance: str,
+    lookbacks: list[int],
+) -> None:
+    """跑多個 lookback，睇下表現對參數有幾敏感（過度擬合檢查）。"""
+    print(f"Lookback 敏感度分析（top_n={top_n}, rebalance={rebalance}, cost={cost_bps:.1f} bps）：")
+    rows = []
+    for lookback in lookbacks:
+        weights = build_target_weights(
+            close_prices=close_prices,
+            symbols=symbols,
+            lookback_days=lookback,
+            top_n=top_n,
+        )
+        result = run_bt_backtest(
+            close_prices=close_prices,
+            weights=weights,
+            benchmark_symbol=benchmark_symbol,
+            initial_cash=initial_cash,
+            cost_bps=cost_bps,
+            rebalance=rebalance,
+        )
+        stats = result.stats
+        rows.append(
+            {
+                "lookback": lookback,
+                "CAGR": float(stats.loc["cagr", "Momentum Rotation"]) * 100,
+                "最大回撤": float(stats.loc["max_drawdown", "Momentum Rotation"]) * 100,
+                "總回報": float(stats.loc["total_return", "Momentum Rotation"]) * 100,
+            }
+        )
+    table = pd.DataFrame(rows)
+    table["CAGR"] = table["CAGR"].map(lambda v: f"{v:.2f}%")
+    table["最大回撤"] = table["最大回撤"].map(lambda v: f"{v:.2f}%")
+    table["總回報"] = table["總回報"].map(lambda v: f"{v:.2f}%")
+    print(format_bordered_table(table))
 
 
 def fetch_yahoo_history(symbol: str, start: str, end: str | None) -> pd.Series:

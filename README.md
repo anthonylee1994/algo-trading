@@ -61,6 +61,22 @@ uv run python main.py --top-n 3
 uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14 --output-csv output/backtest_trades.csv
 ```
 
+### 方法學（睇數字前必讀）
+
+- **無前視偏差**：用 `close[t]` 計嘅 momentum 信號會推遲一個交易日先成交（`weights.shift(1)`），唔會「用收市價計、又用同一個收市價成交」。
+- **有交易成本**：每次成交收 `--cost-bps`（預設 `15` = 0.15%，佣金 + 滑點）。設 `--cost-bps 0` 先係舊版嘅「零成本」幻覺。
+- **重新平衡頻率**：`--rebalance {daily,weekly,monthly}`，預設 `monthly`。Momentum rotation 高換手，daily rebalance 喺真錢交易會被成本食凸。
+- **倖存者偏差**：Yahoo 只有現存上市股票，已退市嘅唔會出現；啟動時會印出每隻 symbol 真實數據起始日，遲上市嘅會標 ⚠️。早年 universe 細咗 → 回報會偏高，自己打個折扣。
+- **過度擬合檢查**：用 `--sweep-lookback 63 126 252 504` 跑多個 lookback，睇 CAGR／回撤對參數有幾敏感。差距大 = 揀中嘅參數靠彩數。
+
+```sh
+# 例：monthly rebalance、0.15% 成本、順便做 lookback 敏感度分析
+uv run python scripts/backtest_momentum_rotation.py \
+  --start 2010-01-01 --end 2026-06-14 \
+  --rebalance monthly --cost-bps 15 \
+  --sweep-lookback 63 126 252 504
+```
+
 預設會輸出交易紀錄 CSV：
 
 ```text

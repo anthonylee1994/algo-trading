@@ -14,12 +14,26 @@ from algo_trading.futu_trader import (
 
 
 DEFAULT_SYMBOLS = [
+    "CRM",
     "MSFT",
-    "GOOG",
-    "AVGO",
-    "TSM",
-    "AMZN",
     "NVDA",
+    "HOOD",
+    "IBM",
+    "AMZN",
+    "AAPL",
+    "HON",
+    "COIN",
+    "META",
+    "GOOG",
+    "TSM",
+    "ETN",
+    "JPM",
+    "IBKR",
+    "GEV",
+    "AVGO",
+    "NDAQ",
+    "AXP",
+    "MRK",
 ]
 
 

@@ -76,9 +76,18 @@ uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 202
 - **無前視偏差**：用 `close[t]` 計嘅 momentum 信號會推遲一個交易日先成交（`weights.shift(1)`），唔會「用收市價計、又用同一個收市價成交」。
 - **有交易成本**：每次成交收 `--cost-bps`（預設 `15` = 0.15%，佣金 + 滑點）。設 `--cost-bps 0` 先係舊版嘅「零成本」幻覺。
 - **重新平衡頻率**：`--rebalance {daily,weekly,monthly}`，預設 `monthly`。Momentum rotation 高換手，daily rebalance 喺真錢交易會被成本食凸。
-- **動態 universe**：預設每個年份用該年 S&P 500 市值 Top 10。即係 2010 只會喺 2010 Top 10 入面揀，2026 就用 2026 snapshot。想返去舊式固定名單，可以傳 `--symbols AAPL MSFT NVDA ...`。
+- **動態 universe（無 membership 前視）**：預設每年用市值 Top 10，但**滯後 1 年**（`--universe-lag-years 1`）——因為 Y 年底個快照要到 Y 年完先知道，所以 Y 年只可以用 Y−1 年底嘅名單。設 `--universe-lag-years 0` 會還原舊行為（有前視，數字會虛高，淨係用嚟對照）。想返去舊式固定名單，傳 `--symbols AAPL MSFT NVDA ...`。
+- **季度／point-in-time universe**：`--universe-json` 除咗年度格式（`{"2010":[...]}`），亦支援**日期 key**（`{"2014-03-31":[...]}`）。日期格式會按「快照生效日 + `--universe-publication-lag-days`」之後至可用，granularity 更幼、更貼近真實可交易。有 Norgate / Sharadar 季度市值就用呢個。
 - **倖存者偏差**：Yahoo 只有現存上市股票，已退市嘅唔會出現；啟動時會印出每隻 symbol 真實數據起始日，遲上市嘅會標 ⚠️。早年 universe 細咗 → 回報會偏高，自己打個折扣。
 - **過度擬合檢查**：用 `--sweep-lookback 63 126 252 504` 跑多個 lookback，睇 CAGR／回撤對參數有幾敏感。差距大 = 揀中嘅參數靠彩數。
+- **指數托底（贏 QQQ 嘅最穩配置）**：`--index-floor QQQ`。正動量股票唔夠 `top_n` 隻時，空倉位用 QQQ 補（而唔係攤分／揸現金）。配 `--top-n 5`，無前視無倖存者偏差之下仍然跑贏 QQQ：CAGR 19.4% vs 19.2%、最大回撤 -30.6% vs -35.1%（回報微贏、回撤明顯細）。`--top-n 1` 喺乾淨數據反而最差，集中唔等於賺多。
+
+```sh
+# 修正後最穩、跑贏 QQQ 嘅配置
+uv run python scripts/backtest_momentum_rotation.py \
+  --universe-json sp500_top_10_market_cap_2010_2026.json \
+  --top-n 5 --index-floor QQQ --start 2010-01-01
+```
 
 ```sh
 # 例：monthly rebalance、0.15% 成本、順便做 lookback 敏感度分析

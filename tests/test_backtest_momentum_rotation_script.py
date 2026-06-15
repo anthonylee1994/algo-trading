@@ -2,26 +2,72 @@ import pandas as pd
 
 from algo_trading.market_cap_universe import (
     latest_universe_symbols,
+    load_dated_market_cap_universe,
+    load_market_cap_universe,
     load_yearly_market_cap_universe,
     symbols_for_date,
+    symbols_for_schedule,
 )
 from scripts.backtest_momentum_rotation import build_target_weights
 
 
-def test_symbols_for_date_uses_matching_year_universe() -> None:
+def test_symbols_for_date_lags_one_year_to_avoid_lookahead() -> None:
     universe_by_year = {
         2020: ["AAPL", "MSFT"],
         2021: ["NVDA", "TSLA"],
     }
 
+    # 預設滯後 1 年：2022 年只可以用 2021 年底快照，2021 年用 2020 年底快照。
+    assert symbols_for_date(pd.Timestamp("2022-06-01"), ["IBM"], universe_by_year) == [
+        "NVDA",
+        "TSLA",
+    ]
+    assert symbols_for_date(pd.Timestamp("2021-06-01"), ["IBM"], universe_by_year) == [
+        "AAPL",
+        "MSFT",
+    ]
+    # 最早期未有更早快照，退而用最早一份。
     assert symbols_for_date(pd.Timestamp("2020-06-01"), ["IBM"], universe_by_year) == [
         "AAPL",
         "MSFT",
     ]
-    assert symbols_for_date(pd.Timestamp("2021-06-01"), ["IBM"], universe_by_year) == [
-        "NVDA",
-        "TSLA",
+
+
+def test_symbols_for_date_lag_zero_restores_same_year() -> None:
+    universe_by_year = {2020: ["AAPL", "MSFT"], 2021: ["NVDA", "TSLA"]}
+    assert symbols_for_date(
+        pd.Timestamp("2021-06-01"), ["IBM"], universe_by_year, lag_years=0
+    ) == ["NVDA", "TSLA"]
+
+
+def test_symbols_for_schedule_respects_effective_and_publication_lag() -> None:
+    schedule = [
+        (pd.Timestamp("2014-12-31"), ["AAPL", "XOM"]),
+        (pd.Timestamp("2015-03-31"), ["AAPL", "GOOGL"]),
     ]
+    # 2015-04-01 + 0 lag：用返 2015-03-31 快照。
+    assert symbols_for_schedule(pd.Timestamp("2015-04-01"), [], schedule) == [
+        "AAPL",
+        "GOOGL",
+    ]
+    # 加 60 日 publication lag，2015-04-01 仲未用得 2015-03-31，要返上一份。
+    assert symbols_for_schedule(
+        pd.Timestamp("2015-04-01"), [], schedule, publication_lag_days=60
+    ) == ["AAPL", "XOM"]
+
+
+def test_load_market_cap_universe_autodetects_format(tmp_path) -> None:
+    annual = tmp_path / "annual.json"
+    annual.write_text('{"data": {"2025": [{"symbol": "AAPL"}]}}')
+    dated = tmp_path / "dated.json"
+    dated.write_text('{"data": {"2015-03-31": [{"symbol": "GOOGL"}]}}')
+
+    kind_a, loaded_a = load_market_cap_universe(annual)
+    kind_d, loaded_d = load_market_cap_universe(dated)
+
+    assert kind_a == "annual" and loaded_a == {2025: ["AAPL"]}
+    assert kind_d == "dated"
+    assert loaded_d == load_dated_market_cap_universe(dated)
 
 
 def test_load_yearly_market_cap_universe_and_latest_symbols(tmp_path) -> None:
@@ -52,7 +98,7 @@ def test_load_yearly_market_cap_universe_and_latest_symbols(tmp_path) -> None:
     assert latest_universe_symbols(["IBM"], universe_by_year) == ["NVDA", "GOOGL"]
 
 
-def test_build_target_weights_limits_candidates_to_yearly_universe() -> None:
+def test_build_target_weights_limits_candidates_to_lagged_universe() -> None:
     close_prices = pd.DataFrame(
         {
             "AAPL": [100.0, 110.0, 120.0, 130.0],
@@ -64,19 +110,21 @@ def test_build_target_weights_limits_candidates_to_yearly_universe() -> None:
             ["2020-12-30", "2020-12-31", "2021-01-01", "2021-01-04"]
         ),
     )
+    universe_by_year = {2020: ["AAPL", "MSFT"], 2021: ["NVDA", "TSLA"]}
 
     weights = build_target_weights(
         close_prices=close_prices,
         symbols=["AAPL", "MSFT", "NVDA", "TSLA"],
-        universe_by_year={
-            2020: ["AAPL", "MSFT"],
-            2021: ["NVDA", "TSLA"],
-        },
+        universe_resolver=lambda date: symbols_for_date(
+            date, [], universe_by_year, lag_years=1
+        ),
         lookback_days=1,
         top_n=1,
     )
 
+    # 滯後 1 年：2021 年只可以揀 2020 年底嘅 [AAPL, MSFT]，
+    # 就算 NVDA 喺 2021 動量爆炸都唔會入選（呢個正正係修咗嘅前視）。
     assert weights.loc["2021-01-01", "AAPL"] == 1.0
     assert weights.loc["2021-01-01", "NVDA"] == 0.0
-    assert weights.loc["2021-01-04", "NVDA"] == 1.0
-    assert weights.loc["2021-01-04", "AAPL"] == 0.0
+    assert weights.loc["2021-01-04", "AAPL"] == 1.0
+    assert weights.loc["2021-01-04", "NVDA"] == 0.0

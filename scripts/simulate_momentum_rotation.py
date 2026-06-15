@@ -17,8 +17,9 @@ from algo_trading.futu_trader import (
 )
 from algo_trading.market_cap_universe import (
     DEFAULT_MARKET_CAP_UNIVERSE_PATH,
+    latest_schedule_symbols,
     latest_universe_symbols,
-    load_yearly_market_cap_universe,
+    load_market_cap_universe,
 )
 from algo_trading.momentum_rotation import (
     build_equal_weight_rotation_plan,
@@ -69,10 +70,15 @@ def main() -> None:
         strategy_symbols = list(dict.fromkeys(args.symbols))
         universe_label = "固定 universe"
     else:
-        universe_by_year = load_yearly_market_cap_universe(Path(args.universe_json))
-        latest_year = max(universe_by_year)
-        strategy_symbols = latest_universe_symbols([], universe_by_year)
-        universe_label = f"{latest_year} S&P 500 市值 Top 10（{args.universe_json}）"
+        kind, loaded = load_market_cap_universe(Path(args.universe_json))
+        # 實盤用最新「已知」快照即可——過去數據，無前視問題。
+        if kind == "annual":
+            latest_label = max(loaded)
+            strategy_symbols = latest_universe_symbols([], loaded)
+        else:
+            latest_label = loaded[-1][0].date().isoformat()
+            strategy_symbols = latest_schedule_symbols([], loaded)
+        universe_label = f"{latest_label} 市值 Top 10（{args.universe_json}）"
 
     trd_env = TrdEnv.SIMULATE
     codes = [futu_us_code(symbol) for symbol in strategy_symbols]

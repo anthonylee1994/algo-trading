@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from datetime import UTC, datetime
 import json
 from pathlib import Path
@@ -22,10 +23,12 @@ from algo_trading.momentum_rotation import (
 )
 from algo_trading.market_cap_universe import (
     DEFAULT_MARKET_CAP_UNIVERSE_PATH,
-    latest_universe_symbols,
-    load_yearly_market_cap_universe,
+    load_market_cap_universe,
     symbols_for_date,
+    symbols_for_schedule,
 )
+
+UniverseResolver = Callable[[pd.Timestamp], list[str]]
 
 
 def main() -> None:
@@ -34,13 +37,30 @@ def main() -> None:
     parser.add_argument(
         "--universe-json",
         default=str(DEFAULT_MARKET_CAP_UNIVERSE_PATH),
-        help="每年 S&P 500 市值 Top 10 universe JSON；如指定 --symbols 就會改用固定 universe。",
+        help="市值 Top N universe JSON；年度 key 或日期 key 都得。如指定 --symbols 就會改用固定 universe。",
+    )
+    parser.add_argument(
+        "--universe-lag-years",
+        type=int,
+        default=1,
+        help="年度 universe 滯後幾多年至可用（預設 1，避免 membership 前視）。設 0 還原舊行為（有前視）。",
+    )
+    parser.add_argument(
+        "--universe-publication-lag-days",
+        type=int,
+        default=0,
+        help="日期（季度）universe 嘅 publication lag 日數；快照生效日 + 呢個日數後至可用。",
     )
     parser.add_argument("--benchmark", default="QQQ")
     parser.add_argument("--start", default="2010-01-01")
     parser.add_argument("--end", default=None)
     parser.add_argument("--lookback-days", type=int, default=126)
     parser.add_argument("--top-n", type=int, default=2)
+    parser.add_argument(
+        "--index-floor",
+        default=None,
+        help="正動量股票唔夠 top_n 隻時，空倉位用呢個 symbol（通常 QQQ）補返而唔係揸現金。",
+    )
     parser.add_argument("--initial-cash", type=float, default=100_000)
     parser.add_argument(
         "--rebalance",
@@ -73,20 +93,44 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    universe_by_year = None
+    universe_resolver: UniverseResolver | None = None
     if args.symbols:
         strategy_symbols = list(dict.fromkeys(args.symbols))
         data_symbols = strategy_symbols
         universe_label = "固定 universe"
     else:
-        universe_by_year = load_yearly_market_cap_universe(Path(args.universe_json))
-        data_symbols = sorted(
-            {symbol for symbols in universe_by_year.values() for symbol in symbols}
-        )
-        strategy_symbols = data_symbols
-        universe_label = f"每年 S&P 500 市值 Top 10（{args.universe_json}）"
+        kind, loaded = load_market_cap_universe(Path(args.universe_json))
+        if kind == "annual":
+            data_symbols = sorted(
+                {symbol for symbols in loaded.values() for symbol in symbols}
+            )
+            strategy_symbols = data_symbols
+            universe_resolver = lambda date: symbols_for_date(  # noqa: E731
+                date, strategy_symbols, loaded, lag_years=args.universe_lag_years
+            )
+            universe_label = (
+                f"每年 S&P 500 市值 Top 10（滯後 {args.universe_lag_years} 年，{args.universe_json}）"
+            )
+        else:
+            data_symbols = sorted(
+                {symbol for _, symbols in loaded for symbol in symbols}
+            )
+            strategy_symbols = data_symbols
+            universe_resolver = lambda date: symbols_for_schedule(  # noqa: E731
+                date,
+                strategy_symbols,
+                loaded,
+                publication_lag_days=args.universe_publication_lag_days,
+            )
+            universe_label = (
+                f"Point-in-time 市值 universe（{len(loaded)} 個快照，"
+                f"publication lag {args.universe_publication_lag_days} 日）"
+            )
 
-    symbols = list(dict.fromkeys([*data_symbols, args.benchmark]))
+    fetch_symbols = [*data_symbols, args.benchmark]
+    if args.index_floor:
+        fetch_symbols.append(args.index_floor)
+    symbols = list(dict.fromkeys(fetch_symbols))
     charts = {
         symbol: fetch_yahoo_chart(symbol, args.start, args.end) for symbol in symbols
     }
@@ -109,22 +153,24 @@ def main() -> None:
         run_lookback_sweep(
             close_prices=close_prices,
             symbols=strategy_symbols,
-            universe_by_year=universe_by_year,
+            universe_resolver=universe_resolver,
             benchmark_symbol=args.benchmark,
             initial_cash=args.initial_cash,
             top_n=args.top_n,
             cost_bps=args.cost_bps,
             rebalance=args.rebalance,
             lookbacks=args.sweep_lookback,
+            index_floor=args.index_floor,
         )
         print()
 
     weights = build_target_weights(
         close_prices=close_prices,
         symbols=strategy_symbols,
-        universe_by_year=universe_by_year,
+        universe_resolver=universe_resolver,
         lookback_days=args.lookback_days,
         top_n=args.top_n,
+        index_floor=args.index_floor,
     )
     bt_result = run_bt_backtest(
         close_prices=close_prices,
@@ -167,7 +213,9 @@ def main() -> None:
     print(f"長揸最大回撤：{summary['benchmark_max_drawdown_pct']:.2f}%")
     print()
     print("最新 momentum 分數：")
-    latest_symbols = latest_universe_symbols(strategy_symbols, universe_by_year)
+    latest_symbols = (
+        universe_resolver(close_prices.index[-1]) if universe_resolver else strategy_symbols
+    )
     print(
         format_momentum_score_table(
             latest_momentum_score_table(
@@ -201,22 +249,41 @@ def build_target_weights(
     symbols: list[str],
     lookback_days: int,
     top_n: int = 1,
-    universe_by_year: dict[int, list[str]] | None = None,
+    universe_resolver: UniverseResolver | None = None,
+    index_floor: str | None = None,
 ) -> pd.DataFrame:
+    """每個 rebalance 揀 momentum 最強嘅 top_n。
+
+    `index_floor`：當正動量嘅 symbol 唔夠 top_n 隻，空出嚟嘅倉位用呢個 symbol
+    （通常係 QQQ）補返，而唔係攤分／揸現金。即係「最強嗰幾隻 + 其餘跟指數」，
+    令策略喺個別股票唔強時唔會輸大段畀指數。空位邏輯改用 1/top_n 等權。
+    """
     symbols = list(dict.fromkeys(symbols))
-    momentum = close_prices.loc[:, symbols].pct_change(lookback_days)
-    weights = pd.DataFrame(0.0, index=close_prices.index, columns=symbols)
+    candidate_symbols = list(symbols)
+    if index_floor is not None and index_floor not in candidate_symbols:
+        # floor symbol（如 QQQ）唔係 momentum 候選，但要有 column 至補得到倉位。
+        candidate_symbols.append(index_floor)
+    momentum = close_prices.loc[:, candidate_symbols].pct_change(lookback_days)
+    weights = pd.DataFrame(0.0, index=close_prices.index, columns=candidate_symbols)
     top_n = max(top_n, 1)
     for date, row in momentum.iterrows():
-        universe_symbols = symbols_for_date(date, symbols, universe_by_year)
+        universe_symbols = universe_resolver(date) if universe_resolver else symbols
         ranking = row.loc[
             [symbol for symbol in universe_symbols if symbol in row.index]
         ]
         ranking = ranking.dropna().sort_values(ascending=False)
         ranking = ranking[ranking > 0]
-        if ranking.empty:
-            continue
         selected = list(ranking.head(top_n).index)
+        if index_floor is not None:
+            # 每個槽位 1/top_n；空槽位歸 index_floor。
+            for symbol in selected:
+                weights.loc[date, str(symbol)] += 1.0 / top_n
+            empty = top_n - len(selected)
+            if empty > 0 and index_floor in weights.columns:
+                weights.loc[date, index_floor] += empty / top_n
+            continue
+        if not selected:
+            continue
         weight = 1.0 / len(selected)
         for symbol in selected:
             weights.loc[date, str(symbol)] = weight
@@ -512,13 +579,14 @@ def print_data_coverage(
 def run_lookback_sweep(
     close_prices: pd.DataFrame,
     symbols: list[str],
-    universe_by_year: dict[int, list[str]] | None,
+    universe_resolver: UniverseResolver | None,
     benchmark_symbol: str,
     initial_cash: float,
     top_n: int,
     cost_bps: float,
     rebalance: str,
     lookbacks: list[int],
+    index_floor: str | None = None,
 ) -> None:
     """跑多個 lookback，睇下表現對參數有幾敏感（過度擬合檢查）。"""
     print(
@@ -529,9 +597,10 @@ def run_lookback_sweep(
         weights = build_target_weights(
             close_prices=close_prices,
             symbols=symbols,
-            universe_by_year=universe_by_year,
+            universe_resolver=universe_resolver,
             lookback_days=lookback,
             top_n=top_n,
+            index_floor=index_floor,
         )
         result = run_bt_backtest(
             close_prices=close_prices,

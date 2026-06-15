@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date, timedelta
 import math
 from dataclasses import dataclass
 from decimal import Decimal, ROUND_CEILING, ROUND_FLOOR
@@ -87,19 +88,61 @@ def get_price_history(
     quote_ctx = OpenQuoteContext(host=host, port=port)
     try:
         histories: dict[str, pd.DataFrame] = {}
+        start = _history_start_date(max_count)
         for code in codes:
-            ret, data, _ = quote_ctx.request_history_kline(
-                code,
-                ktype=KLType.K_DAY,
-                autype=AuType.QFQ,
+            histories[code] = _request_price_history(
+                quote_ctx=quote_ctx,
+                code=code,
+                start=start,
+                end=date.today().isoformat(),
                 max_count=max_count,
             )
-            if ret != RET_OK:
-                raise RuntimeError(f"{code} Futu 歷史數據錯誤：{data}")
-            histories[code] = data
         return histories
     finally:
         quote_ctx.close()
+
+
+def _history_start_date(max_count: int) -> str:
+    days = max(3 * max_count, 365)
+    return (date.today() - timedelta(days=days)).isoformat()
+
+
+def _request_price_history(
+    quote_ctx: OpenQuoteContext,
+    code: str,
+    start: str,
+    end: str,
+    max_count: int,
+) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    page_req_key = None
+    while True:
+        ret, data, page_req_key = quote_ctx.request_history_kline(
+            code,
+            ktype=KLType.K_DAY,
+            autype=AuType.QFQ,
+            start=start,
+            end=end,
+            max_count=1000,
+            page_req_key=page_req_key,
+        )
+        if ret != RET_OK:
+            raise RuntimeError(f"{code} Futu 歷史數據錯誤：{data}")
+        if not data.empty:
+            frames.append(data)
+        if page_req_key is None:
+            break
+
+    if not frames:
+        return pd.DataFrame()
+    history = _normalize_history_dataframe(pd.concat(frames, ignore_index=True))
+    return history.tail(max_count).reset_index(drop=True)
+
+
+def _normalize_history_dataframe(data: pd.DataFrame) -> pd.DataFrame:
+    if "time_key" in data.columns:
+        data = data.sort_values(by="time_key").reset_index(drop=True)
+    return data
 
 
 def get_positions(

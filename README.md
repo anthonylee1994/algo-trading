@@ -17,17 +17,20 @@
 momentum = 今日收市價 / 126 個交易日前收市價 - 1
 ```
 
-揀 momentum 最高嗰隻：
+FUTU 模擬交易預設揀 momentum 最高嗰兩隻做等權：
 
 ```text
-如果最高 momentum > 0:
+如果有 2 隻或以上 momentum > 0:
+  目標倉位 = 50% 第一名 + 50% 第二名
+
+如果只有 1 隻 momentum > 0:
   目標倉位 = 100% 該 symbol
 
-如果最高 momentum <= 0:
+如果全部 momentum <= 0:
   目標倉位 = 100% 現金
 ```
 
-即係：只持有一隻最強勢標的；如果成個 universe 都轉弱，就清倉持現金。
+即係：用 Top 2 分散單一股票風險；如果成個 universe 都轉弱，就清倉持現金。
 
 ## Dry Run
 
@@ -35,6 +38,13 @@ momentum = 今日收市價 / 126 個交易日前收市價 - 1
 
 ```sh
 uv run python main.py
+```
+
+想改返 Top 1 或試 Top 3：
+
+```sh
+uv run python main.py --top-n 1
+uv run python main.py --top-n 3
 ```
 
 輸出會包括：
@@ -45,7 +55,7 @@ uv run python main.py
 
 ## Backtest
 
-用 Yahoo adjusted close data + `bt` 跑同一條公式：
+用 Yahoo adjusted close data + `bt` 跑同一條 Top 2 等權公式：
 
 ```sh
 uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14 --output-csv output/backtest_trades.csv
@@ -73,15 +83,22 @@ uv run python scripts/backtest_momentum_rotation.py \
   --plot-path output/backtest_chart.png
 ```
 
-想降低單一股票集中風險，可以試 Top 2 等權：
+想改返 Top 1 或試 Top 3：
 
 ```sh
 uv run python scripts/backtest_momentum_rotation.py \
-  --top-n 2 \
+  --top-n 1 \
   --start 2010-01-01 \
   --end 2026-06-14 \
-  --output-csv output/backtest_trades_top2.csv \
-  --plot-path output/backtest_chart_top2.png
+  --output-csv output/backtest_trades_top1.csv \
+  --plot-path output/backtest_chart_top1.png
+
+uv run python scripts/backtest_momentum_rotation.py \
+  --top-n 3 \
+  --start 2010-01-01 \
+  --end 2026-06-14 \
+  --output-csv output/backtest_trades_top3.csv \
+  --plot-path output/backtest_chart_top3.png
 ```
 
 可以改 benchmark，例如同 strong hold `MSFT` 比：

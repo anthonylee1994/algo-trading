@@ -342,7 +342,7 @@ def validate_plan(
         raise RuntimeError("已到每日風控上限，無落單。")
 
     available_cash = get_available_cash(host=host, port=port, trd_env=trd_env)
-    buy_notional = 0.0
+    planned_available_cash = available_cash
     rejected: list[dict[str, Any]] = []
     validated: list[TradePlanItem] = []
 
@@ -376,19 +376,21 @@ def validate_plan(
                 }
             )
             continue
-        if item.action == "BUY":
-            if buy_notional + item.notional > available_cash:
+        if item.action == "SELL":
+            planned_available_cash += item.notional
+        elif item.action == "BUY":
+            if item.notional > planned_available_cash:
                 rejected.append(
                     {
                         "code": item.code,
                         "action": item.action,
                         "notional": item.notional,
-                        "available_cash": available_cash,
+                        "available_cash": planned_available_cash,
                         "reason": "可用現金不足",
                     }
                 )
                 continue
-            buy_notional += item.notional
+            planned_available_cash -= item.notional
         validated.append(item)
 
     if not validated and rejected:

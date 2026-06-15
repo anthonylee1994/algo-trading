@@ -17,10 +17,10 @@ from algo_trading.futu_trader import (
 )
 from algo_trading.momentum_rotation import (
     DEFAULT_SYMBOLS,
-    build_rotation_plan,
+    build_equal_weight_rotation_plan,
     format_momentum_score_table,
     momentum_score_table,
-    select_rotation_signal,
+    select_rotation_targets,
 )
 from algo_trading.risk_manager import (
     cancel_open_orders,
@@ -35,6 +35,7 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--symbols", nargs="+", default=DEFAULT_SYMBOLS)
     parser.add_argument("--lookback-days", type=int, default=126)
+    parser.add_argument("--top-n", type=int, default=2)
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
     parser.add_argument("--futu-rsa-file", default=None)
@@ -67,9 +68,10 @@ def main() -> None:
         code.removeprefix("US."): history
         for code, history in histories_by_code.items()
     }
-    signal = select_rotation_signal(
+    targets = select_rotation_targets(
         histories=histories,
         lookback_days=args.lookback_days,
+        top_n=args.top_n,
     )
     prices = get_latest_prices(
         host=args.futu_host,
@@ -91,8 +93,8 @@ def main() -> None:
         port=args.futu_port,
         trd_env=trd_env,
     )
-    plan = build_rotation_plan(
-        signal=signal,
+    plan = build_equal_weight_rotation_plan(
+        targets=targets,
         prices=prices,
         positions=positions,
         available_cash=float(account["available_cash"]),
@@ -103,9 +105,9 @@ def main() -> None:
     print(
         {
             "模式": "模擬盤",
-            "訊號": signal.ticker or "現金",
-            "momentum": signal.momentum,
-            "原因": signal.reason,
+            "訊號": ", ".join(str(target.ticker) for target in targets) or "現金",
+            "momentum": [target.momentum for target in targets],
+            "原因": f"Top {args.top_n} 等權 {args.lookback_days} 日 momentum",
             "帳戶": account,
         }
     )

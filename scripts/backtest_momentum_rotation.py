@@ -29,7 +29,7 @@ def main() -> None:
     parser.add_argument("--start", default="2010-01-01")
     parser.add_argument("--end", default=None)
     parser.add_argument("--lookback-days", type=int, default=126)
-    parser.add_argument("--top-n", type=int, default=1)
+    parser.add_argument("--top-n", type=int, default=2)
     parser.add_argument("--initial-cash", type=float, default=100_000)
     parser.add_argument(
         "--output-csv",

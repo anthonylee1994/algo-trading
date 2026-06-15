@@ -98,6 +98,26 @@ def select_rotation_signal(
     )
 
 
+def select_rotation_targets(
+    histories: dict[str, pd.DataFrame],
+    lookback_days: int = 126,
+    top_n: int = 2,
+) -> list[RotationSignal]:
+    score_table = momentum_score_table(histories, lookback_days)
+    valid_scores = score_table.dropna(subset=["momentum"])
+    valid_scores = valid_scores[valid_scores["momentum"] > 0].head(max(top_n, 1))
+    targets: list[RotationSignal] = []
+    for _, row in valid_scores.iterrows():
+        targets.append(
+            RotationSignal(
+                ticker=str(row["ticker"]),
+                momentum=float(row["momentum"]),
+                reason=f"Top {top_n} 等權 {lookback_days} 日 momentum",
+            )
+        )
+    return targets
+
+
 def momentum_score_table(
     histories: dict[str, pd.DataFrame],
     lookback_days: int = 126,
@@ -310,6 +330,173 @@ def build_rotation_plan(
         )
     )
     return plan
+
+
+def build_equal_weight_rotation_plan(
+    targets: list[RotationSignal],
+    prices: dict[str, float],
+    positions: dict[str, dict[str, float]],
+    available_cash: float,
+    symbols: list[str] | None = None,
+    min_trade_notional: float = 100,
+) -> list[TradePlanItem]:
+    symbols = symbols or DEFAULT_SYMBOLS
+    universe_codes = {futu_us_code(symbol) for symbol in symbols}
+    target_by_code = {futu_us_code(str(target.ticker)): target for target in targets}
+    target_codes = set(target_by_code)
+    plan: list[TradePlanItem] = []
+
+    if not target_codes:
+        return _sell_all_universe_positions(
+            prices=prices,
+            positions=positions,
+            universe_codes=universe_codes,
+            min_trade_notional=min_trade_notional,
+            reason="最高 momentum <= 0，持現金",
+        )
+
+    current_values = {
+        code: _position_value(code, position, prices)
+        for code, position in positions.items()
+        if code in universe_codes
+    }
+    total_equity = available_cash + sum(current_values.values())
+    target_value = total_equity / len(target_codes)
+
+    sell_plan: list[TradePlanItem] = []
+    buy_plan: list[TradePlanItem] = []
+
+    for code, position in positions.items():
+        if code not in universe_codes:
+            continue
+        price = _price_for_code(code, position, prices)
+        quantity = math.floor(float(position.get("quantity") or 0))
+        if quantity <= 0 or price <= 0:
+            continue
+
+        current_value = quantity * price
+        if code not in target_codes:
+            sell_plan.append(
+                _trade_plan_item(
+                    action="SELL",
+                    code=code,
+                    price=price,
+                    quantity=quantity,
+                    reason="非 Top 2 目標持倉",
+                )
+            )
+            continue
+
+        excess_value = current_value - target_value
+        if excess_value >= min_trade_notional:
+            sell_quantity = min(quantity, math.floor(excess_value / price))
+            if sell_quantity > 0:
+                sell_plan.append(
+                    _trade_plan_item(
+                        action="SELL",
+                        code=code,
+                        price=price,
+                        quantity=sell_quantity,
+                        reason=target_by_code[code].reason,
+                    )
+                )
+
+    for code, target in target_by_code.items():
+        target_price = prices.get(code)
+        if target_price is None or target_price <= 0:
+            raise RuntimeError(f"{code} 缺少目標價格")
+
+        current_value = current_values.get(code, 0.0)
+        buy_notional = target_value - current_value
+        if buy_notional < min_trade_notional:
+            continue
+
+        limit_price = normalize_us_order_price(target_price * 1.003, "BUY")
+        quantity = math.floor(buy_notional / limit_price)
+        if quantity <= 0:
+            continue
+        buy_plan.append(
+            TradePlanItem(
+                action="BUY",
+                ticker=str(target.ticker),
+                code=code,
+                company="",
+                price=limit_price,
+                quantity=quantity,
+                notional=limit_price * quantity,
+                reason=f"{target.reason}: {target.momentum:.2%}",
+            )
+        )
+
+    plan.extend(sell_plan)
+    plan.extend(buy_plan)
+    return plan
+
+
+def _sell_all_universe_positions(
+    prices: dict[str, float],
+    positions: dict[str, dict[str, float]],
+    universe_codes: set[str],
+    min_trade_notional: float,
+    reason: str,
+) -> list[TradePlanItem]:
+    plan = []
+    for code, position in positions.items():
+        if code not in universe_codes:
+            continue
+        price = _price_for_code(code, position, prices)
+        quantity = math.floor(float(position.get("quantity") or 0))
+        notional = quantity * price
+        if quantity <= 0 or price <= 0 or notional < min_trade_notional:
+            continue
+        plan.append(
+            _trade_plan_item(
+                action="SELL",
+                code=code,
+                price=price,
+                quantity=quantity,
+                reason=reason,
+            )
+        )
+    return plan
+
+
+def _position_value(
+    code: str,
+    position: dict[str, float],
+    prices: dict[str, float],
+) -> float:
+    price = _price_for_code(code, position, prices)
+    quantity = math.floor(float(position.get("quantity") or 0))
+    return quantity * price if quantity > 0 and price > 0 else 0.0
+
+
+def _price_for_code(
+    code: str,
+    position: dict[str, float],
+    prices: dict[str, float],
+) -> float:
+    return float(prices.get(code, float(position.get("nominal_price") or 0)))
+
+
+def _trade_plan_item(
+    action: str,
+    code: str,
+    price: float,
+    quantity: int,
+    reason: str,
+) -> TradePlanItem:
+    order_price = normalize_us_order_price(price, action)
+    return TradePlanItem(
+        action=action,
+        ticker=code.removeprefix("US."),
+        code=code,
+        company="",
+        price=order_price,
+        quantity=quantity,
+        notional=order_price * quantity,
+        reason=reason,
+    )
 
 
 def latest_momentum_score_table(

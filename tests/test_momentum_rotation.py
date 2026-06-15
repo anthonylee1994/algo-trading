@@ -3,9 +3,11 @@ import pandas as pd
 from algo_trading.momentum_rotation import (
     RotationSignal,
     backtest_rotation,
+    build_equal_weight_rotation_plan,
     build_rotation_plan,
     calculate_momentum,
     momentum_score_table,
+    select_rotation_targets,
     select_rotation_signal,
 )
 
@@ -43,6 +45,19 @@ def test_momentum_score_table_sorts_scores_descending() -> None:
     assert pd.isna(table.iloc[2]["momentum"])
 
 
+def test_select_rotation_targets_returns_top_positive_momentum() -> None:
+    histories = {
+        "MSFT": pd.DataFrame({"close": [100] * 126 + [110]}),
+        "NVDA": pd.DataFrame({"close": [100] * 126 + [150]}),
+        "TSM": pd.DataFrame({"close": [100] * 126 + [130]}),
+        "CRM": pd.DataFrame({"close": [100] * 126 + [90]}),
+    }
+
+    targets = select_rotation_targets(histories, lookback_days=126, top_n=2)
+
+    assert [target.ticker for target in targets] == ["NVDA", "TSM"]
+
+
 def test_build_rotation_plan_sells_non_target_and_buys_target() -> None:
     plan = build_rotation_plan(
         signal=RotationSignal(ticker="NVDA", momentum=0.5, reason="best 126D momentum"),
@@ -55,6 +70,23 @@ def test_build_rotation_plan_sells_non_target_and_buys_target() -> None:
     assert [item.action for item in plan] == ["SELL", "BUY"]
     assert plan[0].code == "US.MSFT"
     assert plan[1].code == "US.NVDA"
+
+
+def test_build_equal_weight_rotation_plan_targets_top_two() -> None:
+    plan = build_equal_weight_rotation_plan(
+        targets=[
+            RotationSignal(ticker="NVDA", momentum=0.5, reason="Top 2"),
+            RotationSignal(ticker="TSM", momentum=0.3, reason="Top 2"),
+        ],
+        prices={"US.NVDA": 100, "US.TSM": 50, "US.MSFT": 25},
+        positions={"US.MSFT": {"quantity": 20, "nominal_price": 25}},
+        available_cash=500,
+        symbols=["MSFT", "NVDA", "TSM"],
+    )
+
+    assert [item.action for item in plan] == ["SELL", "BUY", "BUY"]
+    assert plan[0].code == "US.MSFT"
+    assert {item.code for item in plan[1:]} == {"US.NVDA", "US.TSM"}
 
 
 def test_build_rotation_plan_cash_signal_sells_universe_positions_only() -> None:

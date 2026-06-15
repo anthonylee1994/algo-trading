@@ -73,6 +73,17 @@ uv run python scripts/backtest_momentum_rotation.py \
   --plot-path output/backtest_chart.png
 ```
 
+想降低單一股票集中風險，可以試 Top 2 等權：
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py \
+  --top-n 2 \
+  --start 2010-01-01 \
+  --end 2026-06-14 \
+  --output-csv output/backtest_trades_top2.csv \
+  --plot-path output/backtest_chart_top2.png
+```
+
 可以改 benchmark，例如同 strong hold `MSFT` 比：
 
 ```sh

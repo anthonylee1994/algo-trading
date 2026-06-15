@@ -29,6 +29,7 @@ def main() -> None:
     parser.add_argument("--start", default="2010-01-01")
     parser.add_argument("--end", default=None)
     parser.add_argument("--lookback-days", type=int, default=126)
+    parser.add_argument("--top-n", type=int, default=1)
     parser.add_argument("--initial-cash", type=float, default=100_000)
     parser.add_argument(
         "--output-csv",
@@ -70,6 +71,7 @@ def main() -> None:
         close_prices=close_prices,
         symbols=args.symbols,
         lookback_days=args.lookback_days,
+        top_n=args.top_n,
     )
     bt_result = run_bt_backtest(
         close_prices=close_prices,
@@ -95,6 +97,7 @@ def main() -> None:
 
     print(f"Momentum rotation 回測（{summary['start']} 至 {summary['end']}）")
     print(f"交易範圍：{', '.join(args.symbols)}")
+    print(f"持倉數量：Top {args.top_n}")
     print(f"最終資產：${summary['final_equity']:,.2f}")
     print(f"總回報：{summary['total_return_pct']:.2f}%")
     print(f"年化回報：{summary['cagr_pct']:.2f}%")
@@ -139,15 +142,21 @@ def build_target_weights(
     close_prices: pd.DataFrame,
     symbols: list[str],
     lookback_days: int,
+    top_n: int = 1,
 ) -> pd.DataFrame:
     symbols = list(dict.fromkeys(symbols))
     momentum = close_prices.loc[:, symbols].pct_change(lookback_days)
     weights = pd.DataFrame(0.0, index=close_prices.index, columns=symbols)
+    top_n = max(top_n, 1)
     for date, row in momentum.iterrows():
         ranking = row.dropna().sort_values(ascending=False)
-        if ranking.empty or float(ranking.iloc[0]) <= 0:
+        ranking = ranking[ranking > 0]
+        if ranking.empty:
             continue
-        weights.loc[date, str(ranking.index[0])] = 1.0
+        selected = list(ranking.head(top_n).index)
+        weight = 1.0 / len(selected)
+        for symbol in selected:
+            weights.loc[date, str(symbol)] = weight
     return weights
 
 
@@ -237,42 +246,69 @@ def build_curve(
     equity = strategy_prices.map(lambda value: _bt_price_to_equity(value, initial_cash))
     equity = equity.reindex(weights.index).ffill().dropna()
     weights = weights.reindex(equity.index).fillna(0)
-    selected = weights.apply(_selected_from_weight_row, axis=1)
-    previous_selected = selected.shift(1).fillna("CASH")
     momentum = close_prices.pct_change(lookback_days).reindex(equity.index)
     rows = []
+    previous_symbols: list[str] = []
     for date in equity.index:
-        current = str(selected.loc[date])
-        previous = str(previous_selected.loc[date])
+        current_symbols = _symbols_from_weight_row(weights.loc[date])
+        bought_symbols = [symbol for symbol in current_symbols if symbol not in previous_symbols]
+        sold_symbols = [symbol for symbol in previous_symbols if symbol not in current_symbols]
         rows.append(
             {
                 "date": date.date().isoformat(),
                 "signal_date": date.date().isoformat(),
-                "selected": current,
-                "previous_selected": previous,
-                "momentum": _price_value(momentum, date, current),
-                "buy_price": _price_value(close_prices, date, current),
-                "sell_price": _price_value(close_prices, date, previous),
+                "selected": _format_symbols(current_symbols),
+                "previous_selected": _format_symbols(previous_symbols),
+                "momentum": _max_momentum(momentum, date, current_symbols),
+                "buy_price": _format_symbol_prices(close_prices, date, bought_symbols),
+                "sell_price": _format_symbol_prices(close_prices, date, sold_symbols),
                 "equity": float(equity.loc[date]),
                 "drawdown": float(equity.loc[date] / equity.loc[:date].max() - 1),
                 "day_return": float(equity.pct_change().fillna(0).loc[date]),
             }
         )
+        previous_symbols = current_symbols
     curve = pd.DataFrame(rows)
     return curve
 
 
-def _selected_from_weight_row(row: pd.Series) -> str:
+def _symbols_from_weight_row(row: pd.Series) -> list[str]:
     if row.empty or float(row.max()) <= 0:
-        return "CASH"
-    return str(row.idxmax())
+        return []
+    selected = row[row > 0].sort_values(ascending=False)
+    return [str(symbol) for symbol in selected.index]
 
 
-def _price_value(values: pd.DataFrame, date: pd.Timestamp, symbol: str) -> float:
-    if symbol == "CASH" or symbol not in values.columns or date not in values.index:
+def _format_symbols(symbols: list[str]) -> str:
+    return ", ".join(symbols) if symbols else "CASH"
+
+
+def _max_momentum(values: pd.DataFrame, date: pd.Timestamp, symbols: list[str]) -> float:
+    if not symbols or date not in values.index:
         return float("nan")
-    value = values.loc[date, symbol]
+    row = values.loc[date, [symbol for symbol in symbols if symbol in values.columns]]
+    if row.empty:
+        return float("nan")
+    value = row.max()
     return float(value) if not pd.isna(value) else float("nan")
+
+
+def _format_symbol_prices(
+    values: pd.DataFrame,
+    date: pd.Timestamp,
+    symbols: list[str],
+) -> str:
+    if not symbols or date not in values.index:
+        return ""
+    parts = []
+    for symbol in symbols:
+        if symbol not in values.columns:
+            continue
+        value = values.loc[date, symbol]
+        if pd.isna(value):
+            continue
+        parts.append(f"{symbol}:{float(value):,.2f}")
+    return "; ".join(parts)
 
 
 def _bt_price_to_equity(price: float, initial_cash: float) -> float:
@@ -327,6 +363,8 @@ def _format_percent(value: float) -> str:
 
 
 def _format_price(value: float) -> str:
+    if isinstance(value, str):
+        return value
     if pd.isna(value):
         return ""
     return f"{float(value):,.2f}"

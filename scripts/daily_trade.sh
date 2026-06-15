@@ -15,16 +15,16 @@ log() {
 }
 
 stop_opend() {
-  log "Stopping Futu OpenD"
+  log "停止 Futu OpenD"
   docker-compose stop futu-opend
 }
 
 trap stop_opend EXIT INT TERM
 
-log "Starting Futu OpenD"
+log "啟動 Futu OpenD"
 docker-compose up -d futu-opend
 
-log "Waiting for Futu OpenD"
+log "等待 Futu OpenD API port ready"
 deadline=$(( $(date +%s) + READY_TIMEOUT_SECONDS ))
 while :; do
   if nc -z "$FUTU_HOST" "$FUTU_PORT"; then
@@ -32,14 +32,14 @@ while :; do
   fi
 
   if [ "$(date +%s)" -ge "$deadline" ]; then
-    log "Futu OpenD did not become ready within ${READY_TIMEOUT_SECONDS}s"
+    log "Futu OpenD 喺 ${READY_TIMEOUT_SECONDS}s 內都未 ready"
     exit 1
   fi
 
   sleep 10
 done
 
-log "Executing simulated trading plan"
+log "執行模擬交易計劃"
 uv run python main.py \
   --futu-host "$FUTU_HOST" \
   --futu-port "$FUTU_PORT" \

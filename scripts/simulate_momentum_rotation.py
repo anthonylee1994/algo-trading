@@ -101,33 +101,33 @@ def main() -> None:
 
     print(
         {
-            "mode": "SIMULATE",
-            "signal": signal.ticker or "CASH",
+            "模式": "模擬盤",
+            "訊號": signal.ticker or "現金",
             "momentum": signal.momentum,
-            "reason": signal.reason,
-            "account": account,
+            "原因": signal.reason,
+            "帳戶": account,
         }
     )
-    print("Momentum scores:")
+    print("Momentum 分數：")
     print(format_momentum_score_table(score_table))
     for item in plan:
         print(
             {
-                "action": item.action,
-                "code": item.code,
-                "price": item.price,
-                "quantity": item.quantity,
-                "notional": item.notional,
-                "reason": item.reason,
+                "動作": item.action,
+                "代號": item.code,
+                "價格": item.price,
+                "數量": item.quantity,
+                "金額": item.notional,
+                "原因": item.reason,
             }
         )
 
     if not args.execute:
-        print("DRY RUN only. Add --execute to place simulated orders.")
+        print("只係 dry-run。加 --execute 先會落模擬盤 order。")
         return
 
     if not plan:
-        print("No rebalance needed. No simulated orders placed.")
+        print("唔需要再平衡，無落任何模擬盤 order。")
         return
 
     if args.cancel_open_orders:
@@ -151,7 +151,7 @@ def main() -> None:
         max_single_order_notional=args.max_single_order_notional,
     )
     if not guarded_plan:
-        raise RuntimeError("No orders passed the risk guard. No orders placed.")
+        raise RuntimeError("無 order 通過風控，無落單。")
 
     results = place_orders(
         plan=guarded_plan,

@@ -28,8 +28,8 @@ OPEN_ORDER_STATUSES = {
     OrderStatus.FILLED_PART,
 }
 FUTU_CONNECTION_HINT = (
-    "Check that Futu OpenD is running, logged in, listening on the configured "
-    "host/port, and using the same RSA key expected by the Docker container."
+    "請確認 Futu OpenD 已啟動、已登入、正喺設定嘅 host/port 監聽，"
+    "而且使用同 Docker container 預期一致嘅 RSA key。"
 )
 
 
@@ -62,7 +62,7 @@ def _json_safe(value: Any) -> Any:
 
 def check_kill_switch(path: Path = KILL_SWITCH_PATH) -> None:
     if path.exists():
-        raise RuntimeError(f"Kill switch exists: {path}. No orders placed.")
+        raise RuntimeError(f"停止開關存在：{path}。無落任何 order。")
 
 
 def _to_float(value: Any) -> float:
@@ -78,7 +78,7 @@ def check_futu_connection(host: str, port: int, timeout: float = 5.0) -> None:
             return
     except OSError as exc:
         raise RuntimeError(
-            f"Cannot connect to Futu OpenD at {host}:{port}. {FUTU_CONNECTION_HINT}"
+            f"連唔到 {host}:{port} 嘅 Futu OpenD。{FUTU_CONNECTION_HINT}"
         ) from exc
 
 
@@ -99,7 +99,7 @@ def _query_account_info(
             currency=Currency.USD,
         )
         if ret != RET_OK:
-            raise RuntimeError(f"Futu account info error: {data}")
+            raise RuntimeError(f"Futu account info 錯誤：{data}")
         if data.empty:
             return None
         return data.iloc[0]
@@ -107,7 +107,7 @@ def _query_account_info(
         raise
     except Exception as exc:
         raise RuntimeError(
-            f"Futu account info query failed at {host}:{port}. {FUTU_CONNECTION_HINT}"
+            f"喺 {host}:{port} 查詢 Futu account info 失敗。{FUTU_CONNECTION_HINT}"
         ) from exc
     finally:
         trade_ctx.close()
@@ -183,7 +183,7 @@ def get_open_orders(
             refresh_cache=True,
         )
         if ret != RET_OK:
-            raise RuntimeError(f"Futu open order error: {data}")
+            raise RuntimeError(f"Futu open order 查詢錯誤：{data}")
         return data.to_dict(orient="records")
     finally:
         trade_ctx.close()
@@ -245,7 +245,7 @@ def cancel_open_orders(
                 "result": data,
             }
             if ret != RET_OK:
-                raise RuntimeError(f"Futu cancel order error: {result}")
+                raise RuntimeError(f"Futu cancel order 錯誤：{result}")
             results.append(result)
         return results
     finally:
@@ -327,19 +327,19 @@ def validate_plan(
 
     open_orders = get_open_orders(host=host, port=port, trd_env=trd_env)
     if open_orders:
-        raise RuntimeError(f"Open orders exist. No new orders placed: {open_orders}")
+        raise RuntimeError(f"仲有 open orders，唔會落新 order：{open_orders}")
 
     journal = load_journal()
     today_orders = _today_risk_orders(journal)
     if len(today_orders) >= max_daily_orders:
-        raise RuntimeError("Daily order count limit reached. No orders placed.")
+        raise RuntimeError("已到每日 order 數量上限，無落單。")
 
     used_notional = sum(float(order.get("notional") or 0) for order in today_orders)
     remaining_orders = max_daily_orders - len(today_orders)
     remaining_notional = max_daily_notional - used_notional
 
     if remaining_orders <= 0 or remaining_notional <= 0:
-        raise RuntimeError("Daily risk limit reached. No orders placed.")
+        raise RuntimeError("已到每日風控上限，無落單。")
 
     available_cash = get_available_cash(host=host, port=port, trd_env=trd_env)
     buy_notional = 0.0
@@ -352,7 +352,7 @@ def validate_plan(
                 {
                     "code": item.code,
                     "action": item.action,
-                    "reason": "remaining order count reached",
+                    "reason": "已到剩餘 order 數量上限",
                 }
             )
             break
@@ -362,7 +362,7 @@ def validate_plan(
                     "code": item.code,
                     "action": item.action,
                     "notional": item.notional,
-                    "reason": "single order notional limit",
+                    "reason": "超過單筆 order 金額上限",
                 }
             )
             continue
@@ -372,7 +372,7 @@ def validate_plan(
                     "code": item.code,
                     "action": item.action,
                     "notional": item.notional,
-                    "reason": "remaining daily notional limit",
+                    "reason": "超過剩餘每日金額上限",
                 }
             )
             continue
@@ -384,7 +384,7 @@ def validate_plan(
                         "action": item.action,
                         "notional": item.notional,
                         "available_cash": available_cash,
-                        "reason": "insufficient available cash",
+                        "reason": "可用現金不足",
                     }
                 )
                 continue
@@ -393,7 +393,7 @@ def validate_plan(
 
     if not validated and rejected:
         raise RuntimeError(
-            "Risk guard filtered out all orders. "
+            "風控過濾咗所有 orders。"
             f"available_cash={available_cash}, "
             f"remaining_orders={remaining_orders}, "
             f"remaining_notional={remaining_notional}, "

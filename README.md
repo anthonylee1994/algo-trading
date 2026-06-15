@@ -1,42 +1,97 @@
 # Algo Trading
 
-Daily US simulated momentum rotation strategy.
+每日美股 FUTU 模擬交易策略。依家 `main.py` 只做一件事：跑 126 日 momentum rotation，並且只會用 `TrdEnv.SIMULATE`，無真錢落單路徑。
 
-See [DEPLOY.md](DEPLOY.md) for server deployment with Futu OpenD Docker.
+部署 Futu OpenD Docker 可睇 [DEPLOY.md](DEPLOY.md)。
 
-The simulated momentum rotation strategy uses this universe:
+## 策略
+
+交易 universe：
 
 - `MSFT`, `GOOG`, `AVGO`, `TSM`, `AMZN`, `NVDA`, `SMH`, `QQQ`, `QTUM`, `ROBO`,
   `XLV`, `SHLD`, `TAN`, `IGV`
 
-It calculates 126-day momentum for each symbol using Futu daily adjusted
-history. If the strongest symbol has positive momentum, the strategy targets
-100% simulated exposure to that symbol. If the strongest momentum is zero or
-negative, it sells the strategy universe and holds cash.
+每日用 FUTU QFQ 日線計每隻股票 / ETF 嘅 126 日 momentum：
 
-Dry-run the simulated rotation plan:
+```text
+momentum = 今日收市價 / 126 個交易日前收市價 - 1
+```
+
+揀 momentum 最高嗰隻：
+
+```text
+如果最高 momentum > 0:
+  目標倉位 = 100% 該 symbol
+
+如果最高 momentum <= 0:
+  目標倉位 = 100% 現金
+```
+
+即係：只持有一隻最強勢標的；如果成個 universe 都轉弱，就清倉持現金。
+
+## Dry Run
+
+只計 signal 同交易計劃，唔落單：
 
 ```sh
 uv run python main.py
 ```
 
-Backtest the same rotation formula with Yahoo adjusted close data:
+輸出會包括：
+
+- 當前 signal
+- 所有 symbols 嘅 momentum score table
+- 需要買 / 賣嘅模擬交易計劃
+
+## Backtest
+
+用 Yahoo adjusted close data 跑同一條公式：
 
 ```sh
 uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14
 ```
 
-Place simulated orders through Futu OpenD:
+可以改 benchmark，例如同 strong hold `SMH` 比：
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py --benchmark SMH --start 2010-01-01 --end 2026-06-14
+```
+
+或者同 strong hold `NVDA` 比：
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py --benchmark NVDA --start 2010-01-01 --end 2026-06-14
+```
+
+## 模擬落單
+
+透過 Futu OpenD 落模擬盤 order：
 
 ```sh
 uv run python main.py --execute
 ```
 
-Safety controls:
+取消 bot journal 入面記錄嘅 open orders，再重新驗證同落模擬單：
 
-- `STOP_TRADING` file stops all execution when present.
-- `trade_journal.json` records submitted orders.
-- Open orders block new orders.
-- `--cancel-open-orders` cancels bot journal open orders before revalidating and placing a new plan.
-- Daily order count, daily notional, and single-order notional limits are checked before execution.
-- Only `TrdEnv.SIMULATE` is used; there is no real-money execution path.
+```sh
+uv run python main.py --execute --cancel-open-orders
+```
+
+## 安全制
+
+- `STOP_TRADING` file 存在時會停止落單。
+- `trade_journal.json` 會記錄已提交 order。
+- 有 open orders 時會阻止新 order。
+- `--cancel-open-orders` 只會取消 bot journal 記錄過嘅 open orders。
+- 會檢查每日 order 數量、每日 notional、單筆 order notional。
+- 只用 `TrdEnv.SIMULATE`；無真錢交易 path。
+
+## 常用參數
+
+```sh
+uv run python main.py \
+  --lookback-days 126 \
+  --max-daily-orders 20 \
+  --max-daily-notional 1000000 \
+  --max-single-order-notional 1000000
+```

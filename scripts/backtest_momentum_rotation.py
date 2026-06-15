@@ -46,28 +46,37 @@ def main() -> None:
         initial_cash=args.initial_cash,
     )
 
-    print(f"Momentum rotation backtest ({result.start} to {result.end})")
-    print(f"Universe: {', '.join(args.symbols)}")
-    print(f"Final equity: ${result.final_equity:,.2f}")
-    print(f"Total return: {result.total_return_pct:.2f}%")
-    print(f"CAGR: {result.cagr_pct:.2f}%")
-    print(f"Max drawdown: {result.max_drawdown_pct:.2f}%")
-    print(f"Signal changes: {result.trade_count}")
+    print(f"Momentum rotation 回測（{result.start} 至 {result.end}）")
+    print(f"交易範圍：{', '.join(args.symbols)}")
+    print(f"最終資產：${result.final_equity:,.2f}")
+    print(f"總回報：{result.total_return_pct:.2f}%")
+    print(f"年化回報：{result.cagr_pct:.2f}%")
+    print(f"最大回撤：{result.max_drawdown_pct:.2f}%")
+    print(f"訊號切換次數：{result.trade_count}")
     print()
-    print(f"Buy-and-hold {args.benchmark}: ${result.benchmark_final_equity:,.2f}")
-    print(f"Buy-and-hold return: {result.benchmark_total_return_pct:.2f}%")
-    print(f"Buy-and-hold CAGR: {result.benchmark_cagr_pct:.2f}%")
-    print(f"Buy-and-hold max drawdown: {result.benchmark_max_drawdown_pct:.2f}%")
+    print(f"長揸 {args.benchmark}：${result.benchmark_final_equity:,.2f}")
+    print(f"長揸回報：{result.benchmark_total_return_pct:.2f}%")
+    print(f"長揸年化回報：{result.benchmark_cagr_pct:.2f}%")
+    print(f"長揸最大回撤：{result.benchmark_max_drawdown_pct:.2f}%")
     print()
-    print("Latest momentum scores:")
+    print("最新 momentum 分數：")
     print(
         format_momentum_score_table(
             latest_momentum_score_table(close_prices, args.lookback_days)
         )
     )
     print()
-    print("Last 10 signals:")
-    print(curve.tail(10).loc[:, ["date", "selected", "momentum", "equity", "drawdown"]].to_string(index=False))
+    print("最後 10 個訊號：")
+    signals = curve.tail(10).loc[:, ["date", "selected", "momentum", "equity", "drawdown"]].rename(
+        columns={
+            "date": "日期",
+            "selected": "持倉",
+            "momentum": "momentum",
+            "equity": "資產",
+            "drawdown": "回撤",
+        }
+    )
+    print(signals.to_string(index=False))
 
 
 def fetch_yahoo_history(symbol: str, start: str, end: str | None) -> pd.Series:
@@ -89,7 +98,7 @@ def fetch_yahoo_history(symbol: str, start: str, end: str | None) -> pd.Series:
 
     chart = payload.get("chart", {})
     if chart.get("error"):
-        raise RuntimeError(f"Yahoo chart error for {symbol}: {chart['error']}")
+        raise RuntimeError(f"{symbol} Yahoo 圖表數據錯誤：{chart['error']}")
 
     result = chart["result"][0]
     timestamps = result["timestamp"]

@@ -25,7 +25,7 @@ def test_select_rotation_signal_returns_cash_when_best_momentum_is_negative() ->
     signal = select_rotation_signal(histories, lookback_days=126)
 
     assert signal.ticker is None
-    assert signal.reason == "best momentum <= 0, hold cash"
+    assert signal.reason == "最高 momentum <= 0，持現金"
 
 
 def test_momentum_score_table_sorts_scores_descending() -> None:

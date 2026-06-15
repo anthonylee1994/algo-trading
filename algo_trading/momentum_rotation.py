@@ -72,7 +72,7 @@ def select_rotation_signal(
         return RotationSignal(
             ticker=None,
             momentum=math.nan,
-            reason="not enough history",
+            reason="歷史數據不足",
         )
 
     row = valid_scores.iloc[0]
@@ -82,12 +82,12 @@ def select_rotation_signal(
         return RotationSignal(
             ticker=None,
             momentum=momentum,
-            reason="best momentum <= 0, hold cash",
+            reason="最高 momentum <= 0，持現金",
         )
     return RotationSignal(
         ticker=ticker,
         momentum=momentum,
-        reason=f"best {lookback_days}D momentum",
+        reason=f"最高 {lookback_days} 日 momentum",
     )
 
 
@@ -125,6 +125,15 @@ def format_momentum_score_table(score_table: pd.DataFrame) -> str:
     table["latest_close"] = table["latest_close"].map(_format_price)
     table["lookback_close"] = table["lookback_close"].map(_format_price)
     table["momentum"] = table["momentum"].map(_format_percent)
+    table = table.rename(
+        columns={
+            "ticker": "代號",
+            "latest_close": "最新收市價",
+            "lookback_close": "回望收市價",
+            "momentum": "momentum",
+            "history_days": "歷史日數",
+        }
+    )
     return table.to_string(index=False)
 
 
@@ -175,7 +184,7 @@ def build_rotation_plan(
 
     target_price = prices.get(target_code)
     if target_price is None or target_price <= 0:
-        raise RuntimeError(f"Missing target price for {target_code}")
+        raise RuntimeError(f"{target_code} 缺少目標價格")
 
     current_quantity = math.floor(
         float(positions.get(target_code, {}).get("quantity") or 0)
@@ -223,7 +232,7 @@ def backtest_rotation(
     initial_cash: float = 100_000,
 ) -> tuple[BacktestResult, pd.DataFrame]:
     if benchmark_symbol not in close_prices.columns:
-        raise RuntimeError(f"Missing benchmark column: {benchmark_symbol}")
+        raise RuntimeError(f"缺少 benchmark 欄位：{benchmark_symbol}")
 
     benchmark_prices = close_prices[benchmark_symbol].dropna()
     close_prices = close_prices.reindex(benchmark_prices.index)

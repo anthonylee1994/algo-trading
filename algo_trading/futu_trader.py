@@ -62,7 +62,7 @@ def _get_latest_prices(host: str, port: int, codes: list[str]) -> dict[str, floa
     try:
         ret, data = quote_ctx.get_market_snapshot(codes)
         if ret != RET_OK:
-            raise RuntimeError(f"Futu quote error: {data}")
+            raise RuntimeError(f"Futu quote 錯誤：{data}")
 
         prices: dict[str, float] = {}
         for row in data.to_dict(orient="records"):
@@ -95,7 +95,7 @@ def get_price_history(
                 max_count=max_count,
             )
             if ret != RET_OK:
-                raise RuntimeError(f"Futu history error for {code}: {data}")
+                raise RuntimeError(f"{code} Futu 歷史數據錯誤：{data}")
             histories[code] = data
         return histories
     finally:
@@ -118,7 +118,7 @@ def get_positions(
             refresh_cache=True,
         )
         if ret != RET_OK:
-            raise RuntimeError(f"Futu position error: {data}")
+            raise RuntimeError(f"Futu position 查詢錯誤：{data}")
 
         positions: dict[str, dict[str, float]] = {}
         for row in data.to_dict(orient="records"):
@@ -432,7 +432,7 @@ def place_orders(
                 password_md5=password_md5,
             )
             if ret != RET_OK:
-                raise RuntimeError(f"Futu unlock trade error: {data}")
+                raise RuntimeError(f"Futu unlock trade 錯誤：{data}")
 
         results: list[dict[str, object]] = []
         for item in plan:
@@ -450,7 +450,7 @@ def place_orders(
                 trd_env=trd_env,
             )
             if ret != RET_OK:
-                raise RuntimeError(f"Futu place order error for {item.code}: {data}")
+                raise RuntimeError(f"{item.code} Futu place order 錯誤：{data}")
 
             results.append(
                 {

@@ -339,21 +339,24 @@ def build_equal_weight_rotation_plan(
     available_cash: float,
     symbols: list[str] | None = None,
     min_trade_notional: float = 100,
+    top_n: int | None = None,
+    index_floor: str | None = None,
+    leverage: float = 1.0,
 ) -> list[TradePlanItem]:
+    """砌等權 rotation 交易計劃。
+
+    預設（top_n=None, index_floor=None, leverage=1.0）：喺 targets 之間滿倉等權
+    （1 / 已選數），無 target 就清倉持現金。
+
+    當 top_n + index_floor（例 QQQ）：每個槽位 1 / top_n，正動量唔夠 top_n 隻時
+    空槽位歸 index_floor。`leverage` 把目標總曝險放大（例 1.15 = 借入 15%）。
+    """
     symbols = symbols or DEFAULT_SYMBOLS
     universe_codes = {futu_us_code(symbol) for symbol in symbols}
+    floor_code = futu_us_code(index_floor) if index_floor else None
+    if floor_code:
+        universe_codes.add(floor_code)
     target_by_code = {futu_us_code(str(target.ticker)): target for target in targets}
-    target_codes = set(target_by_code)
-    plan: list[TradePlanItem] = []
-
-    if not target_codes:
-        return _sell_all_universe_positions(
-            prices=prices,
-            positions=positions,
-            universe_codes=universe_codes,
-            min_trade_notional=min_trade_notional,
-            reason="最高 momentum <= 0，持現金",
-        )
 
     current_values = {
         code: _position_value(code, position, prices)
@@ -361,7 +364,40 @@ def build_equal_weight_rotation_plan(
         if code in universe_codes
     }
     total_equity = available_cash + sum(current_values.values())
-    target_value = total_equity / len(target_codes)
+
+    # 計每個 code 嘅目標市值 + ticker/reason。
+    target_value_by_code: dict[str, float] = {}
+    ticker_by_code: dict[str, str] = {}
+    reason_by_code: dict[str, str] = {}
+
+    use_floor = bool(index_floor and top_n)
+    if use_floor:
+        slots = max(top_n, 1)
+        per_value = (1.0 / slots) * leverage * total_equity
+        for code, target in target_by_code.items():
+            target_value_by_code[code] = per_value
+            ticker_by_code[code] = str(target.ticker)
+            reason_by_code[code] = f"{target.reason}: {target.momentum:.2%}"
+        empty = max(slots - len(target_by_code), 0)
+        if empty > 0 and floor_code:
+            target_value_by_code[floor_code] = (empty / slots) * leverage * total_equity
+            ticker_by_code[floor_code] = str(index_floor)
+            reason_by_code[floor_code] = f"{index_floor} 托底（{empty} 個空倉位）"
+    elif target_by_code:
+        per_value = (1.0 / len(target_by_code)) * leverage * total_equity
+        for code, target in target_by_code.items():
+            target_value_by_code[code] = per_value
+            ticker_by_code[code] = str(target.ticker)
+            reason_by_code[code] = f"{target.reason}: {target.momentum:.2%}"
+
+    if not target_value_by_code:
+        return _sell_all_universe_positions(
+            prices=prices,
+            positions=positions,
+            universe_codes=universe_codes,
+            min_trade_notional=min_trade_notional,
+            reason="最高 momentum <= 0，持現金",
+        )
 
     sell_plan: list[TradePlanItem] = []
     buy_plan: list[TradePlanItem] = []
@@ -375,14 +411,15 @@ def build_equal_weight_rotation_plan(
             continue
 
         current_value = quantity * price
-        if code not in target_codes:
+        target_value = target_value_by_code.get(code)
+        if target_value is None:
             sell_plan.append(
                 _trade_plan_item(
                     action="SELL",
                     code=code,
                     price=price,
                     quantity=quantity,
-                    reason="非 Top 2 目標持倉",
+                    reason="非目標持倉",
                 )
             )
             continue
@@ -397,11 +434,11 @@ def build_equal_weight_rotation_plan(
                         code=code,
                         price=price,
                         quantity=sell_quantity,
-                        reason=target_by_code[code].reason,
+                        reason=reason_by_code[code],
                     )
                 )
 
-    for code, target in target_by_code.items():
+    for code, target_value in target_value_by_code.items():
         target_price = prices.get(code)
         if target_price is None or target_price <= 0:
             raise RuntimeError(f"{code} 缺少目標價格")
@@ -418,19 +455,17 @@ def build_equal_weight_rotation_plan(
         buy_plan.append(
             TradePlanItem(
                 action="BUY",
-                ticker=str(target.ticker),
+                ticker=ticker_by_code[code],
                 code=code,
                 company="",
                 price=limit_price,
                 quantity=quantity,
                 notional=limit_price * quantity,
-                reason=f"{target.reason}: {target.momentum:.2%}",
+                reason=reason_by_code[code],
             )
         )
 
-    plan.extend(sell_plan)
-    plan.extend(buy_plan)
-    return plan
+    return [*sell_plan, *buy_plan]
 
 
 def _sell_all_universe_positions(

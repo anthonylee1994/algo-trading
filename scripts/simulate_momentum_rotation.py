@@ -46,6 +46,17 @@ def main() -> None:
     )
     parser.add_argument("--lookback-days", type=int, default=126)
     parser.add_argument("--top-n", type=int, default=2)
+    parser.add_argument(
+        "--index-floor",
+        default=None,
+        help="正動量股票唔夠 top_n 隻時，空倉位用呢個 symbol（如 QQQ）補返而唔係揸現金。",
+    )
+    parser.add_argument(
+        "--leverage",
+        type=float,
+        default=1.0,
+        help="目標總曝險倍數（例 1.15）。>1 需要孖展戶口，自己評估風險。",
+    )
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
     parser.add_argument("--futu-rsa-file", default=None)
@@ -81,11 +92,17 @@ def main() -> None:
         universe_label = f"{latest_label} 市值 Top 10（{args.universe_json}）"
 
     trd_env = TrdEnv.SIMULATE
-    codes = [futu_us_code(symbol) for symbol in strategy_symbols]
+    # 動量候選 = universe；index-floor（如 QQQ）只係空倉位補位，唔計動量但要有價同倉位。
+    candidate_symbols = list(strategy_symbols)
+    trade_symbols = list(strategy_symbols)
+    if args.index_floor and args.index_floor not in trade_symbols:
+        trade_symbols.append(args.index_floor)
+    candidate_codes = [futu_us_code(symbol) for symbol in candidate_symbols]
+    trade_codes = [futu_us_code(symbol) for symbol in trade_symbols]
     histories_by_code = get_price_history(
         host=args.futu_host,
         port=args.futu_port,
-        codes=codes,
+        codes=candidate_codes,
         max_count=args.lookback_days + 2,
     )
     histories = {
@@ -100,7 +117,7 @@ def main() -> None:
     prices = get_latest_prices(
         host=args.futu_host,
         port=args.futu_port,
-        codes=codes,
+        codes=trade_codes,
     )
     score_table = momentum_score_table(
         histories=histories,
@@ -122,16 +139,24 @@ def main() -> None:
         prices=prices,
         positions=positions,
         available_cash=float(account["available_cash"]),
-        symbols=strategy_symbols,
+        symbols=candidate_symbols,
         min_trade_notional=args.min_trade_notional,
+        top_n=args.top_n,
+        index_floor=args.index_floor,
+        leverage=args.leverage,
     )
 
+    floor_note = f"，空位用 {args.index_floor} 托底" if args.index_floor else ""
+    leverage_note = f"，槓桿 ×{args.leverage:g}" if args.leverage != 1.0 else ""
     print(
         {
             "模式": "模擬盤",
             "訊號": ", ".join(str(target.ticker) for target in targets) or "現金",
             "momentum": [target.momentum for target in targets],
-            "原因": f"Top {args.top_n} 等權 {args.lookback_days} 日 momentum",
+            "原因": (
+                f"Top {args.top_n} 等權 {args.lookback_days} 日 momentum"
+                f"{floor_note}{leverage_note}"
+            ),
             "交易範圍": universe_label,
             "symbols": strategy_symbols,
             "帳戶": account,

@@ -89,6 +89,48 @@ def test_build_equal_weight_rotation_plan_targets_top_two() -> None:
     assert {item.code for item in plan[1:]} == {"US.NVDA", "US.TSM"}
 
 
+def test_build_plan_index_floor_fills_empty_slots_with_qqq() -> None:
+    # top_n=5 但只得 3 隻正動量 → 3 隻各 1 槽，QQQ 補返 2 個空槽。
+    plan = build_equal_weight_rotation_plan(
+        targets=[
+            RotationSignal(ticker="NVDA", momentum=0.5, reason="Top 5"),
+            RotationSignal(ticker="MSFT", momentum=0.3, reason="Top 5"),
+            RotationSignal(ticker="AAPL", momentum=0.1, reason="Top 5"),
+        ],
+        prices={"US.NVDA": 100, "US.MSFT": 100, "US.AAPL": 100, "US.QQQ": 100},
+        positions={},
+        available_cash=100_000,
+        symbols=["NVDA", "MSFT", "AAPL"],
+        top_n=5,
+        index_floor="QQQ",
+    )
+    by_code = {item.code: item for item in plan}
+    assert {item.action for item in plan} == {"BUY"}
+    assert set(by_code) == {"US.NVDA", "US.MSFT", "US.AAPL", "US.QQQ"}
+    # QQQ 補 2 個槽，單一股票 1 個槽 → QQQ 數量約 2 倍。
+    assert by_code["US.QQQ"].quantity == 2 * by_code["US.NVDA"].quantity
+
+
+def test_build_plan_leverage_scales_target_exposure() -> None:
+    common = dict(
+        targets=[
+            RotationSignal(ticker="NVDA", momentum=0.5, reason="Top 2"),
+            RotationSignal(ticker="MSFT", momentum=0.3, reason="Top 2"),
+        ],
+        prices={"US.NVDA": 100, "US.MSFT": 100, "US.QQQ": 100},
+        positions={},
+        available_cash=100_000,
+        symbols=["NVDA", "MSFT"],
+        top_n=2,
+        index_floor="QQQ",
+    )
+    base = build_equal_weight_rotation_plan(**common, leverage=1.0)
+    levered = build_equal_weight_rotation_plan(**common, leverage=1.5)
+    base_notional = sum(item.notional for item in base)
+    levered_notional = sum(item.notional for item in levered)
+    assert levered_notional > base_notional * 1.45
+
+
 def test_build_rotation_plan_cash_signal_sells_universe_positions_only() -> None:
     plan = build_rotation_plan(
         signal=RotationSignal(ticker=None, momentum=-0.1, reason="hold cash"),

@@ -63,6 +63,18 @@ def main() -> None:
     )
     parser.add_argument("--initial-cash", type=float, default=100_000)
     parser.add_argument(
+        "--leverage",
+        type=float,
+        default=1.0,
+        help="組合槓桿倍數（例 1.15）。借入部分按 --financing-rate 收息。",
+    )
+    parser.add_argument(
+        "--financing-rate",
+        type=float,
+        default=0.03,
+        help="槓桿借入部分嘅年化融資成本（預設 3%%）。",
+    )
+    parser.add_argument(
         "--rebalance",
         choices=["daily", "weekly", "monthly"],
         default="monthly",
@@ -212,6 +224,19 @@ def main() -> None:
     print(f"長揸年化回報：{summary['benchmark_cagr_pct']:.2f}%")
     print(f"長揸最大回撤：{summary['benchmark_max_drawdown_pct']:.2f}%")
     print()
+    if args.leverage and args.leverage != 1.0:
+        levered = build_levered_summary(
+            bt_result=bt_result,
+            leverage=args.leverage,
+            financing_rate=args.financing_rate,
+        )
+        print(
+            f"槓桿 ×{args.leverage:g}（融資 {args.financing_rate * 100:.1f}%/年）："
+        )
+        print(f"年化回報：{levered['cagr_pct']:.2f}%")
+        print(f"最大回撤：{levered['max_drawdown_pct']:.2f}%")
+        print(f"Sharpe：{levered['sharpe']:.2f}")
+        print()
     print("最新 momentum 分數：")
     latest_symbols = (
         universe_resolver(close_prices.index[-1]) if universe_resolver else strategy_symbols
@@ -394,6 +419,29 @@ def build_backtest_summary(
         "benchmark_cagr_pct": float(stats.loc["cagr", benchmark_name]) * 100,
         "benchmark_max_drawdown_pct": float(stats.loc["max_drawdown", benchmark_name])
         * 100,
+    }
+
+
+def build_levered_summary(
+    bt_result: bt.backtest.Result,
+    leverage: float,
+    financing_rate: float,
+) -> dict[str, float]:
+    """喺策略每日回報上加槓桿：L×回報 − (L−1)×每日融資成本。"""
+    returns = bt_result.prices["Momentum Rotation"].dropna().pct_change().dropna()
+    daily_financing = (leverage - 1.0) * financing_rate / 252.0
+    levered = leverage * returns - daily_financing
+    growth = float((1.0 + levered).prod())
+    years = len(levered) / 252.0
+    cagr = growth ** (1.0 / years) - 1.0 if years > 0 and growth > 0 else float("nan")
+    equity = (1.0 + levered).cumprod()
+    max_drawdown = float((equity / equity.cummax() - 1.0).min())
+    std = float(levered.std())
+    sharpe = float(levered.mean() / std * (252.0**0.5)) if std > 0 else float("nan")
+    return {
+        "cagr_pct": cagr * 100,
+        "max_drawdown_pct": max_drawdown * 100,
+        "sharpe": sharpe,
     }
 
 

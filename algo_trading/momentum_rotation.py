@@ -140,7 +140,6 @@ def format_momentum_score_table(score_table: pd.DataFrame) -> str:
             [
                 "ticker",
                 "raw_latest_date",
-                "raw_latest_close",
                 "latest_close",
                 "lookback_close",
                 "momentum",
@@ -150,7 +149,6 @@ def format_momentum_score_table(score_table: pd.DataFrame) -> str:
             columns={
                 "ticker": "代號",
                 "raw_latest_date": "最新日期",
-                "raw_latest_close": "最新收市價",
                 "latest_close": "最新調整收市價",
                 "lookback_close": "回望調整收市價",
                 "momentum": "momentum",

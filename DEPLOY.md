@@ -60,7 +60,6 @@ vim .env
 FUTU_ACCOUNT_ID=replace-me
 FUTU_ACCOUNT_PWD_MD5=replace-me
 FUTU_OPEND_IP=127.0.0.1
-FUTU_TRADE_PASSWORD=replace-me
 FUTU_OPEND_RSA_MOUNT=/root/futu-opend/futu.pem
 ```
 
@@ -116,59 +115,37 @@ Finish any required OpenD login/configuration before running real trades. Keep
 
 ## 4. Smoke Test
 
-Check Futu OpenD before running Finviz or strategy logic:
+Check Futu OpenD before running strategy logic:
 
 ```sh
-uv run python main.py \
-  --futu-host 127.0.0.1 \
-  --futu-port 11111 \
-  --check-futu
-```
-
-Run the screener only:
-
-```sh
-uv run python main.py --limit 10
+nc -z 127.0.0.1 11111
 ```
 
 Dry-run against OpenD:
 
 ```sh
 uv run python main.py \
-  --limit 10 \
-  --cash 100000 \
   --futu-host 127.0.0.1 \
-  --futu-port 11111 \
-  --plan
+  --futu-port 11111
 ```
 
 Simulated order test:
 
 ```sh
 uv run python main.py \
-  --cash 100000 \
   --futu-host 127.0.0.1 \
   --futu-port 11111 \
   --execute
 ```
 
-Real market orders:
+Cancel bot journal open orders before a simulated order test:
 
 ```sh
-set -a
-. ./.env
-set +a
-
 uv run python main.py \
-  --cash 100000 \
   --futu-host 127.0.0.1 \
   --futu-port 11111 \
-  --auto \
-  --real \
   --cancel-open-orders \
-  --max-gross-exposure 0.8 \
-  --max-position-weight 0.12 \
-  --rebalance-threshold 0.03
+  --execute
 ```
 
 Orders are market orders by default. Add `--order-type NORMAL` only if you want
@@ -188,7 +165,6 @@ Confirm the host can reach OpenD:
 
 ```sh
 nc -vz 127.0.0.1 11111
-uv run python main.py --check-futu
 ```
 
 Common causes:
@@ -234,9 +210,9 @@ before redeploying or replacing the server.
 
 ## 7. Daily Cron Job
 
-The daily runner starts Futu OpenD, waits until the API is ready, places
-simulated orders, and stops Futu OpenD when it exits. It does not place real
-orders because it does not pass `--real`.
+The daily runner starts Futu OpenD, waits until the API port is ready, places
+simulated orders, and stops Futu OpenD when it exits. There is no real-money
+execution path.
 
 Make it executable after deployment:
 

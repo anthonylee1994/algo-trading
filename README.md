@@ -1,52 +1,29 @@
 # Algo Trading
 
-Daily US stock strategy based on `us-stock.md`.
+Daily US simulated momentum rotation strategy.
 
 See [DEPLOY.md](DEPLOY.md) for server deployment with Futu OpenD Docker.
 
-The first filter layer uses `finvizfinance` instead of hard-coded valuation
-targets. It runs this Finviz screen:
+The simulated momentum rotation strategy uses this universe:
 
-- <https://finviz.com/screener?v=161&f=cap_midover,fa_eps5years_o20,fa_roe_o15&ft=4&o=-marketcap>
-- Market cap over $2bln, 5-year EPS growth over 20%, ROE over 15%, sorted by market cap descending.
+- `MSFT`, `GOOG`, `AVGO`, `TSM`, `AMZN`, `NVDA`, `SMH`, `QQQ`, `QTUM`, `ROBO`,
+  `XLV`, `SHLD`, `TAN`, `IGV`
 
-Run:
+It calculates 126-day momentum for each symbol using Futu daily adjusted
+history. If the strongest symbol has positive momentum, the strategy targets
+100% simulated exposure to that symbol. If the strongest momentum is zero or
+negative, it sells the strategy universe and holds cash.
+
+Dry-run the simulated rotation plan:
 
 ```sh
 uv run python main.py
 ```
 
-Show only the Finviz screener results without calling Futu:
+Place simulated orders through Futu OpenD:
 
 ```sh
-uv run python main.py --limit 10
-```
-
-Dry-run the strategy plan for the first 10 filtered US stocks using Futu OpenD
-quotes, history, and positions:
-
-```sh
-uv run python main.py --limit 10 --cash 10000 --plan
-```
-
-The strategy buys only when the stock and SPY are in uptrends, and sells current
-positions on an 8% hard stop or 50-day SMA break. Position sizing uses Futu
-account assets, available cash, target weight, rebalance threshold, max position
-weight, and max gross exposure.
-
-Place simulated orders:
-
-```sh
-uv run python main.py --cash 10000 --execute
-```
-
-Orders are submitted as market orders by default. Use `--order-type NORMAL` to
-submit normal limit orders using the planned price.
-
-Run guarded automation:
-
-```sh
-uv run python main.py --cash 100000 --auto --cancel-open-orders --max-gross-exposure 0.8 --max-position-weight 0.12 --rebalance-threshold 0.03
+uv run python main.py --execute
 ```
 
 Safety controls:
@@ -55,16 +32,5 @@ Safety controls:
 - `trade_journal.json` records submitted orders.
 - Open orders block new orders.
 - `--cancel-open-orders` cancels bot journal open orders before revalidating and placing a new plan.
-- `--cancel-all-open-orders` also cancels manual open orders when used with `--cancel-open-orders`.
 - Daily order count, daily notional, and single-order notional limits are checked before execution.
-- `--target-weight` overrides equal-weight sizing; otherwise target weight is `1 / limit`.
-- `--max-gross-exposure` caps total target stock exposure.
-- `--max-position-weight` caps each position.
-- `--rebalance-threshold` avoids tiny rebalance orders.
-- `--sell-non-universe` liquidates holdings that are no longer in the filtered universe; it is off by default.
-
-Place real market buy orders:
-
-```sh
-FUTU_TRADE_PASSWORD=... uv run python main.py --cash 10000 --execute --real
-```
+- Only `TrdEnv.SIMULATE` is used; there is no real-money execution path.

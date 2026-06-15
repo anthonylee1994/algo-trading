@@ -74,6 +74,10 @@ def _get_latest_prices(host: str, port: int, codes: list[str]) -> dict[str, floa
         quote_ctx.close()
 
 
+def get_latest_prices(host: str, port: int, codes: list[str]) -> dict[str, float]:
+    return _get_latest_prices(host=host, port=port, codes=codes)
+
+
 def get_price_history(
     host: str,
     port: int,

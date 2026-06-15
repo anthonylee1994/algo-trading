@@ -20,6 +20,12 @@ Dry-run the simulated rotation plan:
 uv run python main.py
 ```
 
+Backtest the same rotation formula with Yahoo adjusted close data:
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14
+```
+
 Place simulated orders through Futu OpenD:
 
 ```sh

@@ -2,8 +2,10 @@ import pandas as pd
 
 from algo_trading.momentum_rotation import (
     RotationSignal,
+    backtest_rotation,
     build_rotation_plan,
     calculate_momentum,
+    momentum_score_table,
     select_rotation_signal,
 )
 
@@ -24,6 +26,21 @@ def test_select_rotation_signal_returns_cash_when_best_momentum_is_negative() ->
 
     assert signal.ticker is None
     assert signal.reason == "best momentum <= 0, hold cash"
+
+
+def test_momentum_score_table_sorts_scores_descending() -> None:
+    histories = {
+        "MSFT": pd.DataFrame({"close": [100] * 126 + [110]}),
+        "NVDA": pd.DataFrame({"close": [100] * 126 + [150]}),
+        "NEW": pd.DataFrame({"close": [100]}),
+    }
+
+    table = momentum_score_table(histories, lookback_days=126)
+
+    assert table.iloc[0]["ticker"] == "NVDA"
+    assert table.iloc[1]["ticker"] == "MSFT"
+    assert table.iloc[2]["ticker"] == "NEW"
+    assert pd.isna(table.iloc[2]["momentum"])
 
 
 def test_build_rotation_plan_sells_non_target_and_buys_target() -> None:
@@ -55,3 +72,23 @@ def test_build_rotation_plan_cash_signal_sells_universe_positions_only() -> None
     assert len(plan) == 1
     assert plan[0].action == "SELL"
     assert plan[0].code == "US.MSFT"
+
+
+def test_backtest_rotation_uses_previous_day_signal() -> None:
+    dates = pd.date_range("2024-01-01", periods=130)
+    close_prices = pd.DataFrame(
+        {
+            "QQQ": [100.0] * 129 + [200.0],
+            "NVDA": [100.0] * 129 + [200.0],
+        },
+        index=dates,
+    )
+
+    result, curve = backtest_rotation(
+        close_prices=close_prices,
+        benchmark_symbol="QQQ",
+        lookback_days=126,
+    )
+
+    assert result.final_equity == 100_000
+    assert curve.iloc[-1]["selected"] == "CASH"

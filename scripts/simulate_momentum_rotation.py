@@ -18,6 +18,8 @@ from algo_trading.futu_trader import (
 from algo_trading.momentum_rotation import (
     DEFAULT_SYMBOLS,
     build_rotation_plan,
+    format_momentum_score_table,
+    momentum_score_table,
     select_rotation_signal,
 )
 from algo_trading.risk_manager import (
@@ -69,6 +71,10 @@ def main() -> None:
         histories=histories,
         lookback_days=args.lookback_days,
     )
+    score_table = momentum_score_table(
+        histories=histories,
+        lookback_days=args.lookback_days,
+    )
     account = get_account_summary(
         host=args.futu_host,
         port=args.futu_port,
@@ -102,6 +108,8 @@ def main() -> None:
             "account": account,
         }
     )
+    print("Momentum scores:")
+    print(format_momentum_score_table(score_table))
     for item in plan:
         print(
             {

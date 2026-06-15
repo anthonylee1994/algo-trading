@@ -8,7 +8,8 @@
 
 交易 universe：
 
-- `MSFT`, `GOOG`, `AVGO`, `TSM`, `AMZN`, `NVDA`
+- `CRM`, `MSFT`, `NVDA`, `HOOD`, `IBM`, `AMZN`, `AAPL`, `HON`, `COIN`, `META`,
+  `GOOG`, `TSM`, `ETN`, `JPM`, `IBKR`, `GEV`, `AVGO`, `NDAQ`, `AXP`, `MRK`
 
 每日用 FUTU QFQ 日線計每隻股票 / ETF 嘅 126 日 momentum：
 

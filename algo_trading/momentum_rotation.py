@@ -397,6 +397,7 @@ def backtest_rotation(
                 "date": date.isoformat(),
                 "signal_date": close_prices.index[signal_index].isoformat(),
                 "selected": selected or "CASH",
+                "previous_selected": previous_selected or "CASH",
                 "momentum": selected_momentum,
                 "buy_price": selected_price,
                 "sell_price": previous_price,

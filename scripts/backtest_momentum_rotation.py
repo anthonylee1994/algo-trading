@@ -105,8 +105,9 @@ def build_trade_table(curve: pd.DataFrame) -> pd.DataFrame:
     columns = [
         "date",
         "signal_date",
-        "selected",
+        "previous_selected",
         "sell_price",
+        "selected",
         "buy_price",
         "momentum",
         "equity",
@@ -117,8 +118,9 @@ def build_trade_table(curve: pd.DataFrame) -> pd.DataFrame:
         columns={
             "date": "日期",
             "signal_date": "訊號日期",
-            "selected": "持倉",
+            "previous_selected": "賣出持倉",
             "sell_price": "賣出價",
+            "selected": "買入持倉",
             "buy_price": "買入價",
             "momentum": "momentum",
             "equity": "資產",

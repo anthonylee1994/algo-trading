@@ -15,6 +15,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from algo_trading.momentum_rotation import (
     DEFAULT_SYMBOLS,
     backtest_rotation,
+    format_bordered_table,
     format_momentum_score_table,
     latest_momentum_score_table,
 )
@@ -28,12 +29,29 @@ def main() -> None:
     parser.add_argument("--end", default=None)
     parser.add_argument("--lookback-days", type=int, default=126)
     parser.add_argument("--initial-cash", type=float, default=100_000)
+    parser.add_argument(
+        "--output-csv",
+        default="backtest_trades.csv",
+        help="交易紀錄 CSV output path；用空字串可跳過輸出。",
+    )
     args = parser.parse_args()
 
     symbols = list(dict.fromkeys([*args.symbols, args.benchmark]))
+    charts = {
+        symbol: fetch_yahoo_chart(symbol, args.start, args.end)
+        for symbol in symbols
+    }
     close_prices = pd.concat(
         [
-            fetch_yahoo_history(symbol, args.start, args.end).rename(symbol)
+            charts[symbol]["adj_close"].rename(symbol)
+            for symbol in symbols
+        ],
+        axis=1,
+        join="outer",
+    ).sort_index()
+    raw_close_prices = pd.concat(
+        [
+            charts[symbol]["close"].rename(symbol)
             for symbol in symbols
         ],
         axis=1,
@@ -62,24 +80,82 @@ def main() -> None:
     print("最新 momentum 分數：")
     print(
         format_momentum_score_table(
-            latest_momentum_score_table(close_prices, args.lookback_days)
+            latest_momentum_score_table(
+                close_prices,
+                args.lookback_days,
+                latest_close_prices=raw_close_prices,
+            )
         )
     )
     print()
-    print("最後 10 個訊號：")
-    signals = curve.tail(10).loc[:, ["date", "selected", "momentum", "equity", "drawdown"]].rename(
+    trades = build_trade_table(curve)
+    if args.output_csv:
+        output_path = Path(args.output_csv)
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        trades.to_csv(output_path, index=False)
+        print(f"交易紀錄 CSV：{output_path}")
+        print()
+
+    print("最後 10 筆交易：")
+    print(format_bordered_table(format_trade_table_for_console(trades.tail(10))))
+
+
+def build_trade_table(curve: pd.DataFrame) -> pd.DataFrame:
+    trade_rows = curve[curve["selected"].ne(curve["selected"].shift())].copy()
+    columns = [
+        "date",
+        "signal_date",
+        "selected",
+        "sell_price",
+        "buy_price",
+        "momentum",
+        "equity",
+        "drawdown",
+        "day_return",
+    ]
+    return trade_rows.loc[:, columns].rename(
         columns={
             "date": "日期",
+            "signal_date": "訊號日期",
             "selected": "持倉",
+            "sell_price": "賣出價",
+            "buy_price": "買入價",
             "momentum": "momentum",
             "equity": "資產",
             "drawdown": "回撤",
+            "day_return": "日回報",
         }
     )
-    print(signals.to_string(index=False))
+
+
+def format_trade_table_for_console(trades: pd.DataFrame) -> pd.DataFrame:
+    table = trades.copy()
+    table["賣出價"] = table["賣出價"].map(_format_price)
+    table["買入價"] = table["買入價"].map(_format_price)
+    table["momentum"] = table["momentum"].map(_format_percent)
+    table["資產"] = table["資產"].map(lambda value: f"{float(value):,.2f}")
+    table["回撤"] = table["回撤"].map(_format_percent)
+    table["日回報"] = table["日回報"].map(_format_percent)
+    return table
+
+
+def _format_percent(value: float) -> str:
+    if pd.isna(value):
+        return ""
+    return f"{float(value) * 100:.2f}%"
+
+
+def _format_price(value: float) -> str:
+    if pd.isna(value):
+        return ""
+    return f"{float(value):,.2f}"
 
 
 def fetch_yahoo_history(symbol: str, start: str, end: str | None) -> pd.Series:
+    return fetch_yahoo_chart(symbol, start, end)["adj_close"]
+
+
+def fetch_yahoo_chart(symbol: str, start: str, end: str | None) -> pd.DataFrame:
     period1 = _timestamp(start)
     period2 = _timestamp(end) if end else int(datetime.now(tz=UTC).timestamp())
     query = urllib.parse.urlencode(
@@ -104,9 +180,16 @@ def fetch_yahoo_history(symbol: str, start: str, end: str | None) -> pd.Series:
     timestamps = result["timestamp"]
     quote = result["indicators"]["quote"][0]
     adjclose = result["indicators"].get("adjclose", [{}])[0].get("adjclose", [])
-    closes = adjclose or quote["close"]
+    closes = quote["close"]
+    adjusted_closes = adjclose or closes
     dates = [datetime.fromtimestamp(ts, tz=UTC).date() for ts in timestamps]
-    return pd.Series(closes, index=dates).dropna()
+    return pd.DataFrame(
+        {
+            "close": closes,
+            "adj_close": adjusted_closes,
+        },
+        index=dates,
+    ).dropna(subset=["close", "adj_close"])
 
 
 def _timestamp(value: str | None) -> int:

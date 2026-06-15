@@ -48,7 +48,22 @@ uv run python main.py
 用 Yahoo adjusted close data 跑同一條公式：
 
 ```sh
-uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14
+uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 2026-06-14 --output-csv output/backtest_trades.csv
+```
+
+預設會輸出交易紀錄 CSV：
+
+```text
+backtest_trades.csv
+```
+
+想指定 output path：
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py \
+  --start 2010-01-01 \
+  --end 2026-06-14 \
+  --output-csv output/backtest_trades.csv
 ```
 
 可以改 benchmark，例如同 strong hold `SMH` 比：

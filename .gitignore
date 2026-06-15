@@ -15,5 +15,6 @@ wheels/
 !.env.example
 
 trade_journal.json
+output/
 .pytest_cache
 .claude

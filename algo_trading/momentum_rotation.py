@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import unicodedata
 from dataclasses import dataclass
 
 import pandas as pd
@@ -94,10 +95,14 @@ def select_rotation_signal(
 def momentum_score_table(
     histories: dict[str, pd.DataFrame],
     lookback_days: int = 126,
+    latest_prices: dict[str, float] | None = None,
 ) -> pd.DataFrame:
     rows: list[dict[str, float | str | int]] = []
     for ticker, history in histories.items():
-        latest_close = float(history["close"].iloc[-1]) if not history.empty else math.nan
+        latest_close = (
+            float(history["close"].iloc[-1]) if not history.empty else math.nan
+        )
+        latest_date = _latest_history_date(history)
         lookback_close = (
             float(history["close"].iloc[-lookback_days - 1])
             if len(history) > lookback_days
@@ -107,34 +112,123 @@ def momentum_score_table(
         rows.append(
             {
                 "ticker": ticker,
+                "latest_date": latest_date,
                 "latest_close": latest_close,
                 "lookback_close": lookback_close,
                 "momentum": momentum,
                 "history_days": len(history),
             }
         )
-    return pd.DataFrame(rows).sort_values(
-        by=["momentum", "ticker"],
-        ascending=[False, True],
-        na_position="last",
-    ).reset_index(drop=True)
+    table = (
+        pd.DataFrame(rows)
+        .sort_values(
+            by=["momentum", "ticker"],
+            ascending=[False, True],
+            na_position="last",
+        )
+        .reset_index(drop=True)
+    )
+    if latest_prices:
+        normalized_latest_prices = _normalize_latest_prices(latest_prices)
+        table["raw_latest_close"] = table["ticker"].map(normalized_latest_prices)
+        table["raw_latest_date"] = table["latest_date"]
+    return table
 
 
 def format_momentum_score_table(score_table: pd.DataFrame) -> str:
     table = score_table.copy()
     table["latest_close"] = table["latest_close"].map(_format_price)
     table["lookback_close"] = table["lookback_close"].map(_format_price)
+    if "raw_latest_close" in table.columns:
+        table["raw_latest_close"] = table["raw_latest_close"].map(_format_price)
     table["momentum"] = table["momentum"].map(_format_percent)
-    table = table.rename(
-        columns={
-            "ticker": "代號",
-            "latest_close": "最新收市價",
-            "lookback_close": "回望收市價",
-            "momentum": "momentum",
-            "history_days": "歷史日數",
-        }
-    )
-    return table.to_string(index=False)
+    if "raw_latest_close" in table.columns:
+        table = table.loc[
+            :,
+            [
+                "ticker",
+                "raw_latest_date",
+                "raw_latest_close",
+                "latest_close",
+                "lookback_close",
+                "momentum",
+                "history_days",
+            ],
+        ].rename(
+            columns={
+                "ticker": "代號",
+                "raw_latest_date": "最新日期",
+                "raw_latest_close": "最新收市價",
+                "latest_close": "最新調整收市價",
+                "lookback_close": "回望調整收市價",
+                "momentum": "momentum",
+                "history_days": "歷史日數",
+            }
+        )
+    else:
+        table = table.rename(
+            columns={
+                "ticker": "代號",
+                "latest_date": "最新日期",
+                "latest_close": "最新調整收市價",
+                "lookback_close": "回望調整收市價",
+                "momentum": "momentum",
+                "history_days": "歷史日數",
+            }
+        )
+    return format_bordered_table(table)
+
+
+def format_bordered_table(table: pd.DataFrame) -> str:
+    string_table = table.map(_format_table_cell)
+    headers = [str(column) for column in string_table.columns]
+    rows = string_table.values.tolist()
+    widths = [
+        max(_display_width(value) for value in [header, *[row[index] for row in rows]])
+        for index, header in enumerate(headers)
+    ]
+    border = "+" + "+".join("-" * (width + 2) for width in widths) + "+"
+    header_row = _format_bordered_row(headers, widths)
+    body_rows = [_format_bordered_row(row, widths) for row in rows]
+    return "\n".join([border, header_row, border, *body_rows, border])
+
+
+def _format_bordered_row(values: list[str], widths: list[int]) -> str:
+    cells = [
+        f" {_pad_table_cell(value, width)} " for value, width in zip(values, widths)
+    ]
+    return "|" + "|".join(cells) + "|"
+
+
+def _format_table_cell(value: object) -> str:
+    if pd.isna(value):
+        return ""
+    return str(value)
+
+
+def _pad_table_cell(value: str, width: int) -> str:
+    return value + " " * (width - _display_width(value))
+
+
+def _display_width(value: str) -> int:
+    width = 0
+    for char in value:
+        width += 2 if unicodedata.east_asian_width(char) in {"F", "W"} else 1
+    return width
+
+
+def _latest_history_date(history: pd.DataFrame) -> str:
+    if history.empty:
+        return ""
+    for column in ["time_key", "date", "datetime"]:
+        if column in history.columns:
+            value = history[column].iloc[-1]
+            return _format_history_date(value)
+    return _format_history_date(history.index[-1])
+
+
+def _normalize_latest_prices(latest_prices: dict[str, float]) -> dict[str, float]:
+    return {str(key).removeprefix("US."): value for key, value in latest_prices.items()}
 
 
 def build_rotation_plan(
@@ -217,12 +311,28 @@ def build_rotation_plan(
 def latest_momentum_score_table(
     close_prices: pd.DataFrame,
     lookback_days: int = 126,
+    latest_close_prices: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
     histories = {
         symbol: pd.DataFrame({"close": close_prices[symbol].dropna()})
         for symbol in close_prices.columns
     }
-    return momentum_score_table(histories=histories, lookback_days=lookback_days)
+    table = momentum_score_table(histories=histories, lookback_days=lookback_days)
+    if latest_close_prices is None:
+        return table
+
+    latest_raw = {}
+    latest_dates = {}
+    for symbol in latest_close_prices.columns:
+        series = latest_close_prices[symbol].dropna()
+        if series.empty:
+            continue
+        latest_raw[symbol] = float(series.iloc[-1])
+        latest_dates[symbol] = _format_history_date(series.index[-1])
+
+    table["raw_latest_close"] = table["ticker"].map(latest_raw)
+    table["raw_latest_date"] = table["ticker"].map(latest_dates)
+    return table
 
 
 def backtest_rotation(
@@ -255,6 +365,20 @@ def backtest_rotation(
             selected = str(ranking.index[0])
             selected_momentum = float(ranking.iloc[0])
 
+        previous_selected = previous_selection
+        selected_price = (
+            float(close_prices.iloc[index][selected])
+            if selected is not None and not math.isnan(float(close_prices.iloc[index][selected]))
+            else math.nan
+        )
+        previous_price = (
+            float(close_prices.iloc[index][previous_selected])
+            if previous_selected is not None
+            and previous_selected in close_prices.columns
+            and not math.isnan(float(close_prices.iloc[index][previous_selected]))
+            else math.nan
+        )
+
         day_return = 0.0
         if selected is not None:
             selected_return = returns.iloc[index][selected]
@@ -274,6 +398,8 @@ def backtest_rotation(
                 "signal_date": close_prices.index[signal_index].isoformat(),
                 "selected": selected or "CASH",
                 "momentum": selected_momentum,
+                "buy_price": selected_price,
+                "sell_price": previous_price,
                 "equity": equity,
                 "drawdown": drawdown,
                 "day_return": day_return,
@@ -292,11 +418,13 @@ def backtest_rotation(
         end=str(curve.iloc[-1]["date"]),
         final_equity=float(curve.iloc[-1]["equity"]),
         total_return_pct=(float(curve.iloc[-1]["equity"]) / initial_cash - 1) * 100,
-        cagr_pct=(float(curve.iloc[-1]["equity"]) / initial_cash) ** (1 / years) * 100 - 100,
+        cagr_pct=(float(curve.iloc[-1]["equity"]) / initial_cash) ** (1 / years) * 100
+        - 100,
         max_drawdown_pct=max_drawdown * 100,
         benchmark_final_equity=benchmark_final_equity,
         benchmark_total_return_pct=(benchmark_final_equity / initial_cash - 1) * 100,
-        benchmark_cagr_pct=(benchmark_final_equity / initial_cash) ** (1 / years) * 100 - 100,
+        benchmark_cagr_pct=(benchmark_final_equity / initial_cash) ** (1 / years) * 100
+        - 100,
         benchmark_max_drawdown_pct=float(benchmark_curve["drawdown"].min()) * 100,
         trade_count=trade_count,
     )
@@ -330,3 +458,7 @@ def _format_percent(value: float) -> str:
     if math.isnan(float(value)):
         return "n/a"
     return f"{float(value) * 100:.2f}%"
+
+
+def _format_history_date(value: object) -> str:
+    return value.isoformat() if hasattr(value, "isoformat") else str(value)

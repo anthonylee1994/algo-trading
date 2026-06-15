@@ -71,9 +71,15 @@ def main() -> None:
         histories=histories,
         lookback_days=args.lookback_days,
     )
+    prices = get_latest_prices(
+        host=args.futu_host,
+        port=args.futu_port,
+        codes=codes,
+    )
     score_table = momentum_score_table(
         histories=histories,
         lookback_days=args.lookback_days,
+        latest_prices=prices,
     )
     account = get_account_summary(
         host=args.futu_host,
@@ -84,11 +90,6 @@ def main() -> None:
         host=args.futu_host,
         port=args.futu_port,
         trd_env=trd_env,
-    )
-    prices = get_latest_prices(
-        host=args.futu_host,
-        port=args.futu_port,
-        codes=codes,
     )
     plan = build_rotation_plan(
         signal=signal,

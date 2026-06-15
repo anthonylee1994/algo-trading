@@ -20,14 +20,6 @@ DEFAULT_SYMBOLS = [
     "TSM",
     "AMZN",
     "NVDA",
-    "SMH",
-    "QQQ",
-    "QTUM",
-    "ROBO",
-    "XLV",
-    "SHLD",
-    "TAN",
-    "IGV",
 ]
 
 
@@ -368,7 +360,8 @@ def backtest_rotation(
         previous_selected = previous_selection
         selected_price = (
             float(close_prices.iloc[index][selected])
-            if selected is not None and not math.isnan(float(close_prices.iloc[index][selected]))
+            if selected is not None
+            and not math.isnan(float(close_prices.iloc[index][selected]))
             else math.nan
         )
         previous_price = (

@@ -8,8 +8,7 @@
 
 交易 universe：
 
-- `MSFT`, `GOOG`, `AVGO`, `TSM`, `AMZN`, `NVDA`, `SMH`, `QQQ`, `QTUM`, `ROBO`,
-  `XLV`, `SHLD`, `TAN`, `IGV`
+- `MSFT`, `GOOG`, `AVGO`, `TSM`, `AMZN`, `NVDA`
 
 每日用 FUTU QFQ 日線計每隻股票 / ETF 嘅 126 日 momentum：
 
@@ -66,10 +65,10 @@ uv run python scripts/backtest_momentum_rotation.py \
   --output-csv output/backtest_trades.csv
 ```
 
-可以改 benchmark，例如同 strong hold `SMH` 比：
+可以改 benchmark，例如同 strong hold `MSFT` 比：
 
 ```sh
-uv run python scripts/backtest_momentum_rotation.py --benchmark SMH --start 2010-01-01 --end 2026-06-14
+uv run python scripts/backtest_momentum_rotation.py --benchmark MSFT --start 2010-01-01 --end 2026-06-14
 ```
 
 或者同 strong hold `NVDA` 比：

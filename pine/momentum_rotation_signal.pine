@@ -1,0 +1,180 @@
+//@version=5
+indicator("Momentum Rotation Signal", overlay=false, max_labels_count=500)
+
+lookback = input.int(126, "Momentum lookback", minval=1)
+tf = input.timeframe("D", "Signal timeframe")
+showTable = input.bool(true, "Show momentum table")
+
+sCRM = input.symbol("NYSE:CRM", "CRM")
+sMSFT = input.symbol("NASDAQ:MSFT", "MSFT")
+sNVDA = input.symbol("NASDAQ:NVDA", "NVDA")
+sHOOD = input.symbol("NASDAQ:HOOD", "HOOD")
+sIBM = input.symbol("NYSE:IBM", "IBM")
+sAMZN = input.symbol("NASDAQ:AMZN", "AMZN")
+sAAPL = input.symbol("NASDAQ:AAPL", "AAPL")
+sHON = input.symbol("NASDAQ:HON", "HON")
+sCOIN = input.symbol("NASDAQ:COIN", "COIN")
+sMETA = input.symbol("NASDAQ:META", "META")
+sGOOG = input.symbol("NASDAQ:GOOG", "GOOG")
+sTSM = input.symbol("NYSE:TSM", "TSM")
+sETN = input.symbol("NYSE:ETN", "ETN")
+sJPM = input.symbol("NYSE:JPM", "JPM")
+sIBKR = input.symbol("NASDAQ:IBKR", "IBKR")
+sGEV = input.symbol("NYSE:GEV", "GEV")
+sAVGO = input.symbol("NASDAQ:AVGO", "AVGO")
+sNDAQ = input.symbol("NASDAQ:NDAQ", "NDAQ")
+sAXP = input.symbol("NYSE:AXP", "AXP")
+sMRK = input.symbol("NYSE:MRK", "MRK")
+
+f_momentum(symbol) =>
+    c = request.security(symbol, tf, close, barmerge.gaps_off, barmerge.lookahead_off)
+    c / c[lookback] - 1
+
+f_pct(value) =>
+    na(value) ? "n/a" : str.tostring(value * 100, "#.##") + "%"
+
+mCRM = f_momentum(sCRM)
+mMSFT = f_momentum(sMSFT)
+mNVDA = f_momentum(sNVDA)
+mHOOD = f_momentum(sHOOD)
+mIBM = f_momentum(sIBM)
+mAMZN = f_momentum(sAMZN)
+mAAPL = f_momentum(sAAPL)
+mHON = f_momentum(sHON)
+mCOIN = f_momentum(sCOIN)
+mMETA = f_momentum(sMETA)
+mGOOG = f_momentum(sGOOG)
+mTSM = f_momentum(sTSM)
+mETN = f_momentum(sETN)
+mJPM = f_momentum(sJPM)
+mIBKR = f_momentum(sIBKR)
+mGEV = f_momentum(sGEV)
+mAVGO = f_momentum(sAVGO)
+mNDAQ = f_momentum(sNDAQ)
+mAXP = f_momentum(sAXP)
+mMRK = f_momentum(sMRK)
+
+bestSymbol = "CASH"
+bestMom = 0.0
+
+if not na(mCRM) and mCRM > bestMom
+    bestSymbol := "CRM"
+    bestMom := mCRM
+if not na(mMSFT) and mMSFT > bestMom
+    bestSymbol := "MSFT"
+    bestMom := mMSFT
+if not na(mNVDA) and mNVDA > bestMom
+    bestSymbol := "NVDA"
+    bestMom := mNVDA
+if not na(mHOOD) and mHOOD > bestMom
+    bestSymbol := "HOOD"
+    bestMom := mHOOD
+if not na(mIBM) and mIBM > bestMom
+    bestSymbol := "IBM"
+    bestMom := mIBM
+if not na(mAMZN) and mAMZN > bestMom
+    bestSymbol := "AMZN"
+    bestMom := mAMZN
+if not na(mAAPL) and mAAPL > bestMom
+    bestSymbol := "AAPL"
+    bestMom := mAAPL
+if not na(mHON) and mHON > bestMom
+    bestSymbol := "HON"
+    bestMom := mHON
+if not na(mCOIN) and mCOIN > bestMom
+    bestSymbol := "COIN"
+    bestMom := mCOIN
+if not na(mMETA) and mMETA > bestMom
+    bestSymbol := "META"
+    bestMom := mMETA
+if not na(mGOOG) and mGOOG > bestMom
+    bestSymbol := "GOOG"
+    bestMom := mGOOG
+if not na(mTSM) and mTSM > bestMom
+    bestSymbol := "TSM"
+    bestMom := mTSM
+if not na(mETN) and mETN > bestMom
+    bestSymbol := "ETN"
+    bestMom := mETN
+if not na(mJPM) and mJPM > bestMom
+    bestSymbol := "JPM"
+    bestMom := mJPM
+if not na(mIBKR) and mIBKR > bestMom
+    bestSymbol := "IBKR"
+    bestMom := mIBKR
+if not na(mGEV) and mGEV > bestMom
+    bestSymbol := "GEV"
+    bestMom := mGEV
+if not na(mAVGO) and mAVGO > bestMom
+    bestSymbol := "AVGO"
+    bestMom := mAVGO
+if not na(mNDAQ) and mNDAQ > bestMom
+    bestSymbol := "NDAQ"
+    bestMom := mNDAQ
+if not na(mAXP) and mAXP > bestMom
+    bestSymbol := "AXP"
+    bestMom := mAXP
+if not na(mMRK) and mMRK > bestMom
+    bestSymbol := "MRK"
+    bestMom := mMRK
+
+signalChanged = bestSymbol != bestSymbol[1]
+alertcondition(signalChanged, "Momentum rotation signal changed", "Momentum rotation signal changed")
+if signalChanged and barstate.isconfirmed
+    alert("Momentum rotation signal: " + bestSymbol + " | momentum: " + f_pct(bestMom), alert.freq_once_per_bar_close)
+
+plot(bestMom * 100, "Best momentum %", color=color.new(color.teal, 0), linewidth=2)
+hline(0, "Cash threshold", color=color.white)
+
+tableBg = color.rgb(17, 24, 39)
+tableAltBg = color.rgb(24, 32, 47)
+signalBg = color.rgb(30, 64, 175)
+headerBg = color.rgb(55, 65, 81)
+selectedBg = color.rgb(22, 101, 52)
+textMain = color.rgb(243, 244, 246)
+textMuted = color.rgb(209, 213, 219)
+positiveText = color.rgb(74, 222, 128)
+negativeText = color.rgb(248, 113, 113)
+
+f_mom_color(mom) =>
+    na(mom) ? textMuted : mom >= 0 ? positiveText : negativeText
+
+var table scoreTable = table.new(position.top_right, 3, 22, bgcolor=tableBg, frame_color=color.rgb(75, 85, 99), frame_width=1, border_color=color.rgb(55, 65, 81), border_width=1)
+
+f_row(row, symbol, mom) =>
+    selected = bestSymbol == symbol
+    bg = selected ? selectedBg : row % 2 == 0 ? tableBg : tableAltBg
+    symbolColor = selected ? color.white : textMain
+    momColor = selected ? color.white : f_mom_color(mom)
+    actionText = selected ? "BUY" : ""
+    table.cell(scoreTable, 0, row, symbol, bgcolor=bg, text_color=symbolColor)
+    table.cell(scoreTable, 1, row, f_pct(mom), bgcolor=bg, text_color=momColor)
+    table.cell(scoreTable, 2, row, actionText, bgcolor=bg, text_color=symbolColor)
+
+if showTable and barstate.islast
+    table.cell(scoreTable, 0, 0, "Signal", bgcolor=signalBg, text_color=color.white)
+    table.cell(scoreTable, 1, 0, bestSymbol, bgcolor=signalBg, text_color=color.white)
+    table.cell(scoreTable, 2, 0, f_pct(bestMom), bgcolor=signalBg, text_color=color.white)
+    table.cell(scoreTable, 0, 1, "Symbol", bgcolor=headerBg, text_color=color.white)
+    table.cell(scoreTable, 1, 1, "126D mom", bgcolor=headerBg, text_color=color.white)
+    table.cell(scoreTable, 2, 1, "Action", bgcolor=headerBg, text_color=color.white)
+    f_row(2, "CRM", mCRM)
+    f_row(3, "MSFT", mMSFT)
+    f_row(4, "NVDA", mNVDA)
+    f_row(5, "HOOD", mHOOD)
+    f_row(6, "IBM", mIBM)
+    f_row(7, "AMZN", mAMZN)
+    f_row(8, "AAPL", mAAPL)
+    f_row(9, "HON", mHON)
+    f_row(10, "COIN", mCOIN)
+    f_row(11, "META", mMETA)
+    f_row(12, "GOOG", mGOOG)
+    f_row(13, "TSM", mTSM)
+    f_row(14, "ETN", mETN)
+    f_row(15, "JPM", mJPM)
+    f_row(16, "IBKR", mIBKR)
+    f_row(17, "GEV", mGEV)
+    f_row(18, "AVGO", mAVGO)
+    f_row(19, "NDAQ", mNDAQ)
+    f_row(20, "AXP", mAXP)
+    f_row(21, "MRK", mMRK)

@@ -78,6 +78,16 @@ uv run python scripts/backtest_momentum_rotation.py --benchmark MSFT --start 201
 uv run python scripts/backtest_momentum_rotation.py --benchmark NVDA --start 2010-01-01 --end 2026-06-14
 ```
 
+## TradingView Signal
+
+Pine Script signal 版喺：
+
+```text
+pine/momentum_rotation_signal.pine
+```
+
+TradingView 可以用佢顯示 126 日 momentum rotation signal 同 alert。不過 Pine Script 做唔到真正 multi-asset rotation execution backtest；完整回測仍然用 Python script。
+
 ## 模擬落單
 
 透過 Futu OpenD 落模擬盤 order：

@@ -35,7 +35,9 @@ TRADING_DAYS = 252
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--tab", default="美股", help="Google Sheet 分頁（美股 / 港股）。")
+    parser.add_argument(
+        "--tab", default="美股", help="Google Sheet 分頁（美股 / 港股）。"
+    )
     parser.add_argument("--benchmark", default="QQQ")
     parser.add_argument("--lookback-days", type=int, default=126)
     parser.add_argument("--top-n", type=int, default=5)
@@ -68,7 +70,9 @@ def main() -> None:
     weights = {s: 1.0 / args.top_n for s in selected}
     empty = max(args.top_n - len(selected), 0)
     if empty > 0 and args.index_floor in close.columns:
-        weights[args.index_floor] = weights.get(args.index_floor, 0.0) + empty / args.top_n
+        weights[args.index_floor] = (
+            weights.get(args.index_floor, 0.0) + empty / args.top_n
+        )
 
     # vol-target 曝險
     realized_vol, exposure = vol_target_exposure(
@@ -76,7 +80,9 @@ def main() -> None:
     )
 
     # ---- 輸出 ----
-    print(f"日期：{close.index[-1].date()}　|　universe：{args.tab}（{len(candidates)} 隻）")
+    print(
+        f"日期：{close.index[-1].date()}　|　universe：{args.tab}（{len(candidates)} 隻）"
+    )
     print(
         f"vol-target {args.vol_target:.0%}：base 實際波幅 {realized_vol:.0%} → "
         f"今日建議曝險 ×{exposure:.2f}（封頂 {args.max_leverage:g}）\n"
@@ -93,35 +99,49 @@ def main() -> None:
         rows.append(
             {
                 "代號": symbol,
-                "名": band["name"][:6],
+                "名": band["name"],
                 "持有": in_hold,
                 "動量": mom,
                 "現價": price,
                 "合理區間": f"{band['low']:.0f}–{band['high']:.0f}",
-                "估值": {"undervalued": "低估", "fair": "合理", "overvalued": "高估"}[status],
+                "估值": {"undervalued": "低估", "fair": "合理", "overvalued": "高估"}[
+                    status
+                ],
                 "距上界": upside,
             }
         )
     table = pd.DataFrame(rows).sort_values("動量", ascending=False)
-    table["動量"] = table["動量"].map(lambda v: f"{v * 100:+.1f}%" if pd.notna(v) else "—")
+    table["動量"] = table["動量"].map(
+        lambda v: f"{v * 100:+.1f}%" if pd.notna(v) else "—"
+    )
     table["現價"] = table["現價"].map(lambda v: f"{v:,.2f}")
-    table["距上界"] = table["距上界"].map(lambda v: f"{v:+.0f}%" if pd.notna(v) else "—")
+    table["距上界"] = table["距上界"].map(
+        lambda v: f"{v:+.0f}%" if pd.notna(v) else "—"
+    )
     print(format_bordered_table(table))
 
     print("\n【今日操作邏輯】")
-    print(f"1. 持有（✅）= 動量最強 {args.top_n} 隻；唔夠就用 {args.index_floor} 托底。")
+    print(
+        f"1. 持有（✅）= 動量最強 {args.top_n} 隻；唔夠就用 {args.index_floor} 托底。"
+    )
     print(f"2. 整體曝險 ×{exposure:.2f}（vol-target；低波加注、高波減注）。")
     print("3. 估值帶 = 紀律：")
     over_held = [
-        s for s in selected
-        if valuation_status(float(close[s].iloc[-1]), bands[s]["low"], bands[s]["high"]) == "overvalued"
+        s
+        for s in selected
+        if valuation_status(float(close[s].iloc[-1]), bands[s]["low"], bands[s]["high"])
+        == "overvalued"
     ]
     under_all = [
-        s for s in candidates
-        if valuation_status(float(close[s].iloc[-1]), bands[s]["low"], bands[s]["high"]) == "undervalued"
+        s
+        for s in candidates
+        if valuation_status(float(close[s].iloc[-1]), bands[s]["low"], bands[s]["high"])
+        == "undervalued"
     ]
     if over_held:
-        print(f"   ⚠️ 動量想持有但【高估】：{', '.join(over_held)} —— 追高風險，注碼收斂。")
+        print(
+            f"   ⚠️ 動量想持有但【高估】：{', '.join(over_held)} —— 追高風險，注碼收斂。"
+        )
     if under_all:
         print(f"   💰 而家【低估】（部署現金 watchlist）：{', '.join(under_all)}")
     print(
@@ -147,7 +167,7 @@ def load_valuation_bands(tab: str) -> dict[str, dict]:
         try:
             low = float(row[col["Valuation Low"]])
             high = float(row[col["Valuation High"]])
-        except (ValueError, IndexError):
+        except ValueError, IndexError:
             continue
         symbol = row[col["Symbol"]].strip()
         bands[symbol] = {
@@ -192,15 +212,22 @@ def fetch_yahoo_close(symbol: str, start: str = "2023-01-01") -> pd.Series:
     period1 = int(datetime.fromisoformat(start).replace(tzinfo=UTC).timestamp())
     period2 = int(datetime.now(tz=UTC).timestamp())
     query = urllib.parse.urlencode(
-        {"period1": period1, "period2": period2, "interval": "1d", "includeAdjustedClose": "true"}
+        {
+            "period1": period1,
+            "period2": period2,
+            "interval": "1d",
+            "includeAdjustedClose": "true",
+        }
     )
     url = f"https://query1.finance.yahoo.com/v8/finance/chart/{symbol.replace('.', '-')}?{query}"
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
     with urllib.request.urlopen(req, timeout=30) as response:
         result = json.load(response)["chart"]["result"][0]
     timestamps = result["timestamp"]
-    adj = result["indicators"].get("adjclose", [{}])[0].get(
-        "adjclose", result["indicators"]["quote"][0]["close"]
+    adj = (
+        result["indicators"]
+        .get("adjclose", [{}])[0]
+        .get("adjclose", result["indicators"]["quote"][0]["close"])
     )
     dates = [datetime.fromtimestamp(t, tz=UTC).date() for t in timestamps]
     return pd.Series(adj, index=pd.to_datetime(dates), name=symbol).dropna()

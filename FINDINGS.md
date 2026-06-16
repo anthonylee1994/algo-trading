@@ -90,6 +90,19 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 
 **結論**：momentum 篩選喺廣泛大盤股冇加風險調整價值。「闊 universe = 真 alpha」假設**證偽**。
 
+### 3a. 板塊 / 主題 ETF 輪動 —— selection bias 嘅活教材
+
+| ETF 輪動（動量 top-N, monthly, 含成本） | CAGR | Sharpe | 備註 |
+| --- | --- | --- | --- |
+| 手揀 7 隻（含 SMH/QTUM）+ top3 + vol-target | 28.3% | 1.04 | ✅ 贏 QQQ —— **但係 selection bias** |
+| 上者抽走 SMH+QTUM（剩 4 隻）| 11.1% | 0.61 | edge 即刻冚 |
+| **中性 29 隻（11 板塊 + 一籃主題含 TAN/ICLN/ARKK/JETS 等衰嘅），top3** | 16.1% | 0.71 | **輸 QQQ** |
+| 中性 29 隻 walk-forward（自適應 top_n） | 14.8% | 0.66 | **輸 QQQ** |
+| 買入持有 QQQ（同期） | 19.7-22.3% | 0.95-1.00 | — |
+
+**鐵證**：手揀含 SMH/QTUM 嘅 basket 贏 QQQ（28%），抽走嗰兩隻後見之明贏家即刻變 11%；用中性規則 universe（point-in-time、含死過嘅主題）+ walk-forward 公正測試 → 16% / Sharpe 0.71，**輸 QQQ**。
+**但有分散價值**：2020 +97%、2022 喺 QQQ 崩盤時仲 +4%。性格同 QQQ 唔同，可做配置一部分降回撤，但**唔係 QQQ-killer**。牛市踏空、亂世防守、全週期淨輸。
+
 ---
 
 ## 4. 基本面因子 —— 同樣輸 QQQ

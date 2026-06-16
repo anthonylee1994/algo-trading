@@ -147,6 +147,44 @@ uv run python scripts/backtest_momentum_rotation.py \
 6. **數據局限**：S&P 500 Top 10 市值名單來自年度快照；真正再嚴謹要季度 point-in-time 數據（Norgate/CRSP）。
 7. **唔係 Sharpe alpha，係 leverage + 減回撤（walk-forward 驗證）**：對 vol-target 版做過 36 組參數 grid + walk-forward。結論：Sharpe ≈ QQQ（0.87–0.97 vs 0.96，只 7/36 組贏），CAGR 嘅「贏」係 **leverage（多冒風險）**，唔係 risk-adjusted alpha；唯一 robust 嘅好處係**回撤細啲**（~-30% vs -35%）。而且**自適應揀 vol-target 參數會 overfit**（OOS Sharpe 跌到 0.82），所以**固定參數、唔好優化**。落注理由應該係「想要 QQQ 級回報但跌少啲、並接受槓桿放大風險」，唔係「搵到 alpha」。
 
-```
+---
 
-```
+## 9. 變體：無槓桿闊池集中版（raw CAGR 跑贏 QQQ）
+
+上面個主策略（窄池 mega-cap × 1.15）靠 **槓桿 + 減回撤** 贏。如果**唔想用槓桿**，數學上唯一仲可以贏 **raw CAGR** 嘅辦法 = **集中**（concentration）。
+
+### 9.1 同主策略嘅分別
+
+| 項目     | 主策略（§1–8）         | 無槓桿集中版                  |
+| -------- | ---------------------- | ----------------------------- |
+| 股票池   | 每年 S&P 500 市值 Top10 | **S&P 500 全體**（breadth 係關鍵） |
+| 持倉     | top5                   | top **N**（N = 3 / 5 / 10）   |
+| 槓桿     | 1.15×                  | **冇（1.0×）**                |
+| 贏嘅來源 | 槓桿 + 回撤裕度        | **闊池集中 → 高 beta／raw CAGR** |
+
+其餘（126 日動量、正動量篩選、等權、QQQ 托底空位、月度、收市信號下一日成交、15 bps）**完全一樣**。
+
+### 9.2 universe 規則（關鍵）
+
+- 用 **S&P 500 全體成員**，唔係 mega-cap top10。
+- 用每隻嘅 **"Date added"**（加入指數日期）做 point-in-time 資格：某月 rebalance 只可以揀**嗰陣已經係成員**嘅股票，避免 membership 前視。
+- **breadth 係 edge 來源**：窄池（cap-weighted top10）嘅 top5 ≈ QQQ 重磅股，所以打和；闊池 top5 = 揀**全市場**最強 5 隻，集中度遠高過 QQQ → CAGR 先跑贏。
+
+### 9.3 已驗證表現（2010+，含 15 bps 成本，兩個獨立 S&P 500 list）
+
+官方 datasets list（503 隻）：
+
+| 配置（無槓桿,+QQQ floor） | CAGR      | Sharpe | 最大回撤   | OOS16 CAGR |
+| ------------------------- | --------- | ------ | ---------- | ---------- |
+| top3                      | **31.6%** | 0.93   | **-52.4%** | 34.9%      |
+| top5                      | 25.7%     | 0.89   | -41.7%     | 26.4%      |
+| **top10（最務實）**       | 23.9%     | 0.94   | -36.9%     | 24.8%      |
+| 長揸 QQQ                  | 19.3%     | 0.96   | -35.1%     | 20.4%      |
+
+兩個獨立 list（hanshof + datasets）top3/5/10 **全部贏 QQQ CAGR（full + OOS）** → 集中 beat **robust**。
+
+### 9.4 風險同局限（同主策略 §8 之外，額外）
+
+1. **Sharpe ≈ 或低過 QQQ（0.89–0.94 vs 0.96）**：CAGR 贏完全係**承受更深回撤**換返嚟，唔係 risk-adjusted alpha。集中 = 無槓桿版嘅「多冒風險換回報」，同槓桿本質一樣，只係換咗形式。**冇免費 CAGR。**
+2. **回撤隨集中度爆升**：top10 ≈ -37%（仲頂得順），top3 去到 **-52%**。揀 N 就係揀你頂唔頂得順幾深嘅坑。**top10 最划算**（贏 4.6pp、Sharpe 0.94 ≈ QQQ、回撤只深 ~2pp）。
+3. **Survivorship caveat（未解決）**：兩個 list 都係**今日**嘅 S&P 500 成員，缺咗歷史上已退市嘅。相對 beat（集中 > 指數）OOS + walk-forward 企得住，但**絕對 CAGR 偏高**。要 Norgate / CRSP 退市數據行 `pit_backtest_momentum_rotation.py` 先 confirm 剩幾多 —— **呢個係唯一未做嘅驗證**。

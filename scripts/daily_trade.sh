@@ -44,11 +44,14 @@ uv run python main.py \
 	--futu-host "$FUTU_HOST" \
 	--futu-port "$FUTU_PORT" \
 	--execute \
-	--top-n 2 \
+	--top-n 5 \
 	--index-floor QQQ \
-	--vol-target 0.26 \
+	--vol-target 0.30 \
 	--vol-window 40 \
-	--max-leverage 1 \
+	--max-leverage 2 \
+	--rebal-band 0.05 \
+	--rebalance monthly \
+	--state-path strategy_state.json \
 	--cancel-open-orders \
 	--max-daily-orders "${MAX_DAILY_ORDERS:-20}" \
 	--max-daily-notional "${MAX_DAILY_NOTIONAL:-1000000}" \

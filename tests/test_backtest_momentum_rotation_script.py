@@ -12,6 +12,7 @@ from scripts.backtest_momentum_rotation import (
     apply_exposure_returns,
     apply_rebalance_band,
     build_target_weights,
+    build_vol_target_summary,
     build_vol_target_exposure,
 )
 
@@ -195,3 +196,44 @@ def test_apply_exposure_returns_deducts_financing_and_turnover_cost() -> None:
         index=returns.index,
     )
     pd.testing.assert_series_equal(result, expected)
+
+
+def test_build_vol_target_summary_exposes_latest_exposure_fields() -> None:
+    idx = pd.date_range("2024-01-01", periods=80, freq="B")
+    prices = pd.DataFrame(
+        {
+            "Momentum Rotation": (1.0 + pd.Series([0.001] * 80, index=idx)).cumprod()
+            * 100.0
+        },
+        index=idx,
+    )
+    benchmark = pd.DataFrame({"QQQ": prices["Momentum Rotation"]}, index=idx)
+    from bt import Strategy, Backtest, algos, run
+
+    result = run(
+        Backtest(
+            Strategy(
+                "Momentum Rotation",
+                [algos.RunMonthly(), algos.WeighTarget(pd.DataFrame({"QQQ": 1.0}, index=idx)), algos.Rebalance()],
+            ),
+            benchmark,
+            initial_capital=100_000,
+            integer_positions=False,
+            commissions=lambda q, p: 0.0,
+        )
+    )
+
+    summary = build_vol_target_summary(
+        bt_result=result,
+        target_vol=0.30,
+        vol_window=20,
+        max_leverage=2.0,
+        financing_rate=0.03,
+        cost_bps=15.0,
+        rebal_band=0.05,
+        initial_cash=100_000,
+    )
+
+    assert "latest_realized_vol_pct" in summary
+    assert "latest_target_exposure" in summary
+    assert "latest_effective_exposure" in summary

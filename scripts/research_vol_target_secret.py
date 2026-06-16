@@ -124,7 +124,7 @@ def load_close_prices(start: str, end: str | None, benchmark: str) -> pd.DataFra
         [charts[symbol]["adj_close"].rename(symbol) for symbol in symbols],
         axis=1,
         join="outer",
-    ).sort_index()
+    ).sort_index().ffill().dropna(how="all")
     close_prices.index = pd.to_datetime(close_prices.index)
     return close_prices
 

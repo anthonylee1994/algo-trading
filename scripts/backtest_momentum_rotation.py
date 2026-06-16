@@ -272,6 +272,9 @@ def main() -> None:
         print(f"平均曝險：{vol_target['avg_exposure']:.2f}x")
         print(f"低波曝險：{vol_target['low_vol_exposure']:.2f}x")
         print(f"高波曝險：{vol_target['high_vol_exposure']:.2f}x")
+        print(f"最新實際波幅：{vol_target['latest_realized_vol_pct']:.2f}%")
+        print(f"最新目標曝險：{vol_target['latest_target_exposure']:.2f}x")
+        print(f"最新有效曝險：{vol_target['latest_effective_exposure']:.2f}x")
         print(f"融資 drag：約 {vol_target['financing_drag_pct']:.2f}%/年")
         print(f"調倉成本：約 {vol_target['rebalance_cost_pct']:.2f}%/年")
         print()
@@ -534,6 +537,11 @@ def build_vol_target_summary(
     std = float(returns.std())
     sharpe = float(returns.mean() / std * (252.0**0.5)) if std > 0 else float("nan")
     realized_vol = base_returns.rolling(vol_window).std() * (252.0**0.5)
+    latest_realized_vol = float(realized_vol.dropna().iloc[-1])
+    latest_raw_exposure = (
+        target_vol / latest_realized_vol if latest_realized_vol > 0 else 0.0
+    )
+    latest_target_exposure = min(latest_raw_exposure, max(max_leverage, 0.0))
     low_vol_cutoff = realized_vol.quantile(0.25)
     high_vol_cutoff = realized_vol.quantile(0.75)
     aligned_exposure = exposure.reindex(returns.index).fillna(0.0)
@@ -562,6 +570,9 @@ def build_vol_target_summary(
         "high_vol_exposure": float(
             aligned_exposure[realized_vol >= high_vol_cutoff].mean()
         ),
+        "latest_realized_vol_pct": latest_realized_vol * 100,
+        "latest_target_exposure": latest_target_exposure,
+        "latest_effective_exposure": float(aligned_exposure.iloc[-1]),
         "financing_drag_pct": financing_drag * 100,
         "rebalance_cost_pct": rebalance_cost * 100,
     }

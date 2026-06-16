@@ -19,7 +19,7 @@
 momentum = 今日收市價 / 126 個交易日前收市價 - 1
 ```
 
-FUTU 模擬交易預設揀 momentum 最高嗰兩隻做等權：
+FUTU 模擬交易預設揀 momentum 最高嗰兩隻做等權；目前建議執行版會用 `--top-n 5 --index-floor QQQ --vol-target 0.30 --max-leverage 2`：
 
 ```text
 如果有 2 隻或以上 momentum > 0:
@@ -32,7 +32,7 @@ FUTU 模擬交易預設揀 momentum 最高嗰兩隻做等權：
   目標倉位 = 100% 現金
 ```
 
-即係：用 Top 2 分散單一股票風險；如果成個 universe 都轉弱，就清倉持現金。
+即係：預設 Top 2 係簡單版；而家跑贏 QQQ 嘅主策略係 Top 5 分散持倉，正動量股票唔夠 5 隻時用 QQQ 補位，再用 vol-target 調整總曝險。
 
 ## Dry Run
 
@@ -60,6 +60,7 @@ uv run python main.py --top-n 3
 - 當前 signal
 - 所有 symbols 嘅 momentum score table
 - 需要買 / 賣嘅模擬交易計劃
+- 如啟用 `--vol-target`：raw target exposure、cap 後 target、現有策略 gross exposure、band 後 effective exposure，同今日係 `hold` 定 `rebalance`
 
 ## Execute
 
@@ -72,6 +73,9 @@ uv run python main.py \
   --vol-target 0.30 \
   --vol-window 40 \
   --max-leverage 2 \
+  --rebal-band 0.05 \
+  --rebalance monthly \
+  --state-path strategy_state.json \
   --min-trade-notional 100 \
   --max-daily-orders 20 \
   --max-daily-notional 1000000 \
@@ -82,7 +86,7 @@ uv run python main.py \
 
 ## Backtest
 
-用 Yahoo adjusted close data + `bt` 跑同一條 Top 2 等權公式。Backtest 預設會讀
+用 Yahoo adjusted close data + `bt` 跑同一條 momentum rotation 公式。Backtest 預設會讀
 `sp500_top_10_market_cap_2010_2026.json`，每年只喺該年 S&P 500 市值最高嗰
 10 隻入面揀 momentum 最高嘅 `--top-n` 隻做交易：
 
@@ -95,6 +99,7 @@ uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 202
 - **無前視偏差**：用 `close[t]` 計嘅 momentum 信號會推遲一個交易日先成交（`weights.shift(1)`），唔會「用收市價計、又用同一個收市價成交」。
 - **有交易成本**：每次成交收 `--cost-bps`（預設 `15` = 0.15%，佣金 + 滑點）。設 `--cost-bps 0` 先係舊版嘅「零成本」幻覺。
 - **重新平衡頻率**：`--rebalance {daily,weekly,monthly}`，預設 `monthly`。Momentum rotation 高換手，daily rebalance 喺真錢交易會被成本食凸。
+  Live execution 都用同一個 cadence：每日可以跑 `main.py` 做監測，但 `--rebalance monthly` 只會喺新月份換 basket；月內只會因 vol-target 需要而按現有持倉比例調整總曝險。`strategy_state.json` 會記錄已處理過嘅 month/week，避免「月初冇成交」之後每日重複觸發 basket rebalance。
 - **動態 universe（無 membership 前視）**：預設每年用市值 Top 10，但**滯後 1 年**（`--universe-lag-years 1`）——因為 Y 年底個快照要到 Y 年完先知道，所以 Y 年只可以用 Y−1 年底嘅名單。設 `--universe-lag-years 0` 會還原舊行為（有前視，數字會虛高，淨係用嚟對照）。想返去舊式固定名單，傳 `--symbols AAPL MSFT NVDA ...`。
 - **季度／point-in-time universe**：`--universe-json` 除咗年度格式（`{"2010":[...]}`），亦支援**日期 key**（`{"2014-03-31":[...]}`）。日期格式會按「快照生效日 + `--universe-publication-lag-days`」之後至可用，granularity 更幼、更貼近真實可交易。有 Norgate / Sharadar 季度市值就用呢個。
 - **倖存者偏差**：Yahoo 只有現存上市股票，已退市嘅唔會出現；啟動時會印出每隻 symbol 真實數據起始日，遲上市嘅會標 ⚠️。早年 universe 細咗 → 回報會偏高，自己打個折扣。
@@ -103,6 +108,12 @@ uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 202
 
 - **槓桿（真正跑贏 QQQ 回報）**：`--leverage 1.15 --financing-rate 0.03`。`top5 + QQQ 托底` 嘅回撤本身細過 QQQ（-30.6% vs -35.1%），加 1.15x 槓桿把呢個裕度換成超額回報：CAGR 21.7% vs QQQ 19.2%，而回撤 -34.6% 仍 ≤ QQQ。即係同樣風險、更高回報。對融資成本好硬淨（5% 都只蝕 ~0.3pp）。
 - **Vol-target（目前最強「住半山」版本）**：先跑 `top5 + QQQ 托底` base portfolio，再按 40 日 realized volatility 調曝險。保守版係 `--vol-target 0.26 --max-leverage 2`，約 CAGR 24.4%、最大回撤 -30.1%；大幅跑贏版係 `--vol-target 0.30 --max-leverage 2`，約 CAGR 26.1%、最大回撤 -33.9%。啟用 `--vol-target` 時，輸出會用 vol-target summary；固定 `--leverage` 只作舊版固定槓桿比較。
+  主回測會同時印出「最新實際波幅 / 最新目標曝險 / 最新有效曝險」，用嚟判斷今日應該企喺山腰邊個高度。
+  注意：QQQ-only VT30 cap2 CAGR 其實更高（約 27.0%），但最大回撤去到 -41.1%。Top5 + QQQ 嘅作用唔係加速，而係降低 base 回撤，令 vol-target 槓桿後仍然似「住半山」。
+  實盤選擇可以當成回撤預算：`VT26 cap2` 係保守主線（約 24.2% CAGR / -30.1% 回撤），`VT30 cap2` 係進取主線（約 26.1% CAGR / -33.9% 回撤）。
+  如果你要「更大幅跑贏」，可以轉去 QLD/TQQQ 呢類槓桿 ETF；但研究結果顯示，CAGR 上到 30-40% 時，最大回撤通常會去到 -40% 到 -80%，唔再係可長期持有嘅半山版。
+  暫時最強「高風險但未到 TQQQ」候選係 `--top-n 10 --vol-target 0.34 --max-leverage 2.5`：約 30.3% CAGR / -39.8% 回撤；5% 融資後仍約 27.6% CAGR。
+  可以用 `scripts/stress_test_momentum_candidates.py` 重跑融資、成本、起始年同 leverage cap 壓力測試；現有結果顯示 Top5 VT30 cap2 係實盤主攻，Top10 VT34 cap2.5 係高風險研究候選，唔係預設落單策略。
 
 ```sh
 # 修正後最穩、跑贏 QQQ 嘅配置（風險調整 + 回報都贏）
@@ -119,6 +130,23 @@ uv run python scripts/backtest_momentum_rotation.py \
   --vol-target 0.30 --vol-window 40 --max-leverage 2 --rebal-band 0.05 \
   --financing-rate 0.03 --rebalance monthly --cost-bps 15 \
   --start 2010-01-01
+```
+
+```sh
+# 進取大幅跑贏版：Top10 + QQQ 托底，target vol 34%、cap 2.5x
+uv run python scripts/backtest_momentum_rotation.py \
+  --universe-json sp500_top_10_market_cap_2010_2026.json \
+  --top-n 10 --index-floor QQQ \
+  --vol-target 0.34 --vol-window 40 --max-leverage 2.5 --rebal-band 0.05 \
+  --financing-rate 0.03 --rebalance monthly --cost-bps 15 \
+  --start 2010-01-01
+```
+
+```sh
+# 壓力測試：比較 Top5 / Top10 候選喺融資、成本、起始年、cap 改變下仲贏唔贏 QQQ
+uv run python scripts/stress_test_momentum_candidates.py \
+  --start 2010-01-01 \
+  --output-csv output/momentum_candidate_stress.csv
 ```
 
 ```sh

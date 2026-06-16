@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import argparse
+from datetime import date
+import json
 from pathlib import Path
 import sys
 
@@ -11,10 +13,12 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from futu import OrderType, SysConfig, TrdEnv
 
 from algo_trading.futu_trader import (
+    TradePlanItem,
     futu_us_code,
     get_latest_prices,
     get_positions,
     get_price_history,
+    normalize_us_order_price,
     place_orders,
 )
 from algo_trading.market_cap_universe import (
@@ -36,6 +40,8 @@ from algo_trading.risk_manager import (
     record_order_results,
     validate_plan,
 )
+
+STATE_PATH = Path("strategy_state.json")
 
 
 def main() -> None:
@@ -76,6 +82,23 @@ def main() -> None:
         type=float,
         default=2.0,
         help="vol-target 曝險上限（預設 2.0 = 2x）。",
+    )
+    parser.add_argument(
+        "--rebal-band",
+        type=float,
+        default=0.05,
+        help="vol-target 目標曝險同現有策略曝險相差超過呢個幅度先調整（預設 0.05x）。",
+    )
+    parser.add_argument(
+        "--rebalance",
+        choices=["daily", "weekly", "monthly"],
+        default="monthly",
+        help="live execution rebalance 頻率；預設 monthly，避免每日換 basket。",
+    )
+    parser.add_argument(
+        "--state-path",
+        default=str(STATE_PATH),
+        help="記錄 live rebalance cadence 嘅 state file。",
     )
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
@@ -161,36 +184,69 @@ def main() -> None:
     # vol-target：用 base portfolio 近 vol_window 日嘅 realized volatility 動態定槓桿。
     leverage_eff = args.leverage
     realized_vol = None
+    vol_state = None
     if args.vol_target:
         base_weights = base_portfolio_weights(targets, args.top_n, args.index_floor)
         realized_vol = base_portfolio_realized_vol(
             histories_all, base_weights, args.vol_window
         )
         if realized_vol and realized_vol > 0:
-            leverage_eff = min(args.vol_target / realized_vol, args.max_leverage)
+            raw_target_leverage = args.vol_target / realized_vol
+            target_leverage = min(raw_target_leverage, args.max_leverage)
+            current_exposure = current_gross_exposure(
+                positions=positions,
+                prices=prices,
+                account=account,
+                symbols=trade_symbols,
+            )
+            leverage_eff, vol_state = decide_vol_target_exposure(
+                raw_target_exposure=raw_target_leverage,
+                capped_target_exposure=target_leverage,
+                current_exposure=current_exposure,
+                rebal_band=args.rebal_band,
+            )
 
-    plan = build_equal_weight_rotation_plan(
-        targets=targets,
-        prices=prices,
-        positions=positions,
-        available_cash=float(account["available_cash"]),
-        symbols=candidate_symbols,
-        min_trade_notional=args.min_trade_notional,
-        top_n=args.top_n,
-        index_floor=args.index_floor,
-        leverage=leverage_eff,
+    rebalance_due = should_rebalance_today(
+        rebalance=args.rebalance,
+        state=load_strategy_state(Path(args.state_path)),
     )
+    if rebalance_due:
+        plan = build_equal_weight_rotation_plan(
+            targets=targets,
+            prices=prices,
+            positions=positions,
+            available_cash=float(account["available_cash"]),
+            symbols=candidate_symbols,
+            min_trade_notional=args.min_trade_notional,
+            top_n=args.top_n,
+            index_floor=args.index_floor,
+            leverage=leverage_eff,
+        )
+    else:
+        plan = build_exposure_adjustment_plan(
+            positions=positions,
+            prices=prices,
+            account=account,
+            symbols=trade_symbols,
+            target_exposure=leverage_eff,
+            min_trade_notional=args.min_trade_notional,
+        )
 
     floor_note = f"，空位用 {args.index_floor} 托底" if args.index_floor else ""
     if args.vol_target and realized_vol:
         leverage_note = (
             f"，vol-target {args.vol_target:.0%}：實際波幅 {realized_vol:.0%}"
-            f" → 曝險 ×{leverage_eff:.2f}（封頂 {args.max_leverage:g}）"
+            f" → raw ×{vol_state['raw_target_exposure']:.2f}"
+            f" / cap ×{vol_state['capped_target_exposure']:.2f}"
+            f" / current ×{vol_state['current_exposure']:.2f}"
+            f" → effective ×{vol_state['effective_exposure']:.2f}"
+            f" ({vol_state['action']}; cap {args.max_leverage:g}, band {args.rebal_band:g})"
         )
     elif leverage_eff != 1.0:
         leverage_note = f"，槓桿 ×{leverage_eff:g}"
     else:
         leverage_note = ""
+
     print(
         {
             "模式": "模擬盤",
@@ -203,10 +259,17 @@ def main() -> None:
             "交易範圍": universe_label,
             "symbols": strategy_symbols,
             "帳戶": account,
+            "rebalance_due": rebalance_due,
         }
     )
     print("Momentum 分數：")
     print(format_momentum_score_table(score_table))
+    if not rebalance_due:
+        print(
+            f"今日唔係 {args.rebalance} rebalance day，"
+            "維持現有 basket；只會按 vol-target 需要調整總曝險。"
+        )
+
     for item in plan:
         print(
             {
@@ -224,6 +287,11 @@ def main() -> None:
         return
 
     if not plan:
+        if rebalance_due and args.rebalance != "daily":
+            save_rebalance_state(
+                path=Path(args.state_path),
+                rebalance=args.rebalance,
+            )
         print("唔需要再平衡，無落任何模擬盤 order。")
         return
 
@@ -258,6 +326,11 @@ def main() -> None:
         order_type=args.order_type,
     )
     record_order_results(guarded_plan, results)
+    if rebalance_due and args.rebalance != "daily":
+        save_rebalance_state(
+            path=Path(args.state_path),
+            rebalance=args.rebalance,
+        )
     for result in results:
         print(result)
 
@@ -311,6 +384,175 @@ def base_portfolio_realized_vol(
     if std <= 0:
         return None
     return std * (trading_days**0.5)
+
+
+def current_gross_exposure(
+    positions: dict[str, dict[str, float]],
+    prices: dict[str, float],
+    account: dict[str, float],
+    symbols: list[str],
+) -> float:
+    """現有策略持倉 gross exposure；只計今次策略 universe / floor symbol。"""
+    total_assets = float(account.get("total_assets") or 0.0)
+    if total_assets <= 0:
+        return 0.0
+
+    strategy_codes = {futu_us_code(symbol) for symbol in symbols}
+    gross_value = 0.0
+    for code, position in positions.items():
+        if code not in strategy_codes:
+            continue
+        quantity = float(position.get("quantity") or 0.0)
+        price = float(prices.get(code, position.get("nominal_price") or 0.0))
+        if quantity > 0 and price > 0:
+            gross_value += quantity * price
+    return gross_value / total_assets
+
+
+def build_exposure_adjustment_plan(
+    positions: dict[str, dict[str, float]],
+    prices: dict[str, float],
+    account: dict[str, float],
+    symbols: list[str],
+    target_exposure: float,
+    min_trade_notional: float,
+) -> list[TradePlanItem]:
+    """非 basket rebalance 日，按現有持倉比例調整總曝險。"""
+    total_assets = float(account.get("total_assets") or 0.0)
+    if total_assets <= 0:
+        return []
+
+    strategy_codes = {futu_us_code(symbol) for symbol in symbols}
+    current_values: dict[str, float] = {}
+    for code, position in positions.items():
+        if code not in strategy_codes:
+            continue
+        quantity = float(position.get("quantity") or 0.0)
+        price = float(prices.get(code, position.get("nominal_price") or 0.0))
+        if quantity > 0 and price > 0:
+            current_values[code] = quantity * price
+
+    current_gross = sum(current_values.values())
+    target_gross = max(float(target_exposure), 0.0) * total_assets
+    if current_gross <= 0 or abs(target_gross - current_gross) < min_trade_notional:
+        return []
+
+    scale = target_gross / current_gross
+    plan: list[TradePlanItem] = []
+    for code, current_value in current_values.items():
+        price = float(prices.get(code, positions[code].get("nominal_price") or 0.0))
+        if price <= 0:
+            continue
+        target_value = current_value * scale
+        diff = target_value - current_value
+        if abs(diff) < min_trade_notional:
+            continue
+        if diff > 0:
+            order_price = normalize_us_order_price(price * 1.003, "BUY")
+            quantity = int(diff // order_price)
+            action = "BUY"
+            reason = "vol-target exposure up（非 basket rebalance 日）"
+        else:
+            order_price = normalize_us_order_price(price, "SELL")
+            quantity = int(min(positions[code].get("quantity") or 0.0, abs(diff) // price))
+            action = "SELL"
+            reason = "vol-target exposure down（非 basket rebalance 日）"
+        if quantity <= 0:
+            continue
+        plan.append(
+            TradePlanItem(
+                action=action,
+                ticker=code.removeprefix("US."),
+                code=code,
+                company="",
+                price=order_price,
+                quantity=quantity,
+                notional=order_price * quantity,
+                reason=reason,
+            )
+        )
+    return plan
+
+
+def apply_exposure_rebalance_band(
+    target_exposure: float,
+    current_exposure: float,
+    rebal_band: float,
+) -> float:
+    """如果現有曝險已貼近 vol-target，就沿用現有曝險，減少細額調倉。"""
+    band = max(float(rebal_band), 0.0)
+    if current_exposure > 0 and abs(target_exposure - current_exposure) <= band:
+        return current_exposure
+    return target_exposure
+
+
+def decide_vol_target_exposure(
+    raw_target_exposure: float,
+    capped_target_exposure: float,
+    current_exposure: float,
+    rebal_band: float,
+) -> tuple[float, dict[str, float | str]]:
+    """計 vol-target 實盤決策，方便 main 印出 raw/cap/current/effective。"""
+    effective_exposure = apply_exposure_rebalance_band(
+        target_exposure=capped_target_exposure,
+        current_exposure=current_exposure,
+        rebal_band=rebal_band,
+    )
+    action = "hold"
+    if effective_exposure != current_exposure:
+        action = "rebalance"
+    return effective_exposure, {
+        "raw_target_exposure": float(raw_target_exposure),
+        "capped_target_exposure": float(capped_target_exposure),
+        "current_exposure": float(current_exposure),
+        "effective_exposure": float(effective_exposure),
+        "action": action,
+    }
+
+
+def should_rebalance_today(
+    rebalance: str,
+    state: dict,
+    today: date | None = None,
+) -> bool:
+    """Live execution 只喺對應 rebalance cadence 先換 basket。"""
+    if rebalance == "daily":
+        return True
+    today = today or date.today()
+    if rebalance == "weekly":
+        return state.get("last_weekly_rebalance_period") != _weekly_period(today)
+    return state.get("last_monthly_rebalance_period") != _monthly_period(today)
+
+
+def load_strategy_state(path: Path = STATE_PATH) -> dict:
+    if not path.exists():
+        return {}
+    return json.loads(path.read_text())
+
+
+def save_rebalance_state(
+    path: Path,
+    rebalance: str,
+    today: date | None = None,
+) -> None:
+    state = load_strategy_state(path)
+    today = today or date.today()
+    if rebalance == "weekly":
+        state["last_weekly_rebalance_period"] = _weekly_period(today)
+    elif rebalance == "monthly":
+        state["last_monthly_rebalance_period"] = _monthly_period(today)
+    else:
+        return
+    path.write_text(json.dumps(state, indent=2, sort_keys=True) + "\n")
+
+
+def _monthly_period(day: date) -> str:
+    return f"{day.year:04d}-{day.month:02d}"
+
+
+def _weekly_period(day: date) -> str:
+    iso = day.isocalendar()
+    return f"{iso.year:04d}-W{iso.week:02d}"
 
 
 if __name__ == "__main__":

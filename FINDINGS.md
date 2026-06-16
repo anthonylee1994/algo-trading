@@ -180,6 +180,7 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 | ----------------------- | ----- | -------- | ------ | -------- | -------- | -------- | --------- | -------- |
 | QQQ buy hold            | 19.4% | -35.1%   | 0.96   | 1.00x    | 1.00x    | 1.00x    | 0.00%     | 0.01%    |
 | QQQ fixed 1.5x          | 26.5% | -50.6%   | 0.92   | 1.50x    | 1.50x    | 1.50x    | 1.50%     | 0.01%    |
+| QQQ VT 30 cap2          | 27.0% | -41.1%   | 0.96   | 1.64x    | 1.90x    | 1.27x    | 2.01%     | 0.47%    |
 | QQQ VT 26 cap2          | 24.2% | -36.7%   | 0.95   | 1.51x    | 1.77x    | 1.16x    | 1.66%     | 0.56%    |
 | top5+QQQ fixed 1.15x    | 21.9% | -34.6%   | 0.94   | 1.15x    | 1.15x    | 1.15x    | 0.45%     | 0.01%    |
 | **top5+QQQ VT 26 cap2** | 24.4% | -30.1%   | 0.95   | 1.49x    | 1.78x    | 1.08x    | 1.61%     | 0.53%    |
@@ -194,8 +195,178 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 - 配合 `top5 + QQQ 托底` 本身回撤細過 QQQ，vol-target 26% cap2 做到 **24% CAGR / -30% 回撤**；再提高到 30% target vol，做到 **26% CAGR / -34% 回撤**，仍細過 QQQ 約 -35%。
 - 5% 融資壓力下仍然成立，但 edge 會縮：`top5+QQQ VT 30 cap2` 約 **24.5% CAGR / -34.0% 回撤**；`cap2.5` 約 **25.4% CAGR / -34.0% 回撤**。
 - `VT30 cap2.5` 係目前最高可接受候選，但低波會貼住 **2.5x**，融資同 margin 壓力大；實盤更合理嘅第一版本係 `VT30 cap2` 或保守嘅 `VT26 cap2`。
+- **更精準講：Top5+QQQ 唔係加速器，係避震器。** 單用 QQQ 做 VT30 cap2 其實 CAGR 更高（27.0% vs 26.1%），但回撤惡化到 **-41.1%**；Top5+QQQ 用約 0.9pp CAGR 換返約 7.2pp 回撤改善（-33.9%），先做到「跑贏但唔企山頂」。
 
 所以「跑贏 QQQ」嘅實際結構係：**先搵一個 Sharpe 接近 QQQ、回撤較細嘅 base portfolio，再用 vol-target 把曝險搬去低波 regime；唔係再搵 RSI/MACD 呢啲訊號。**
+
+### 5.2 進一步拆解：alpha 來自低波 regime，高波只係防守
+
+用 `scripts/attribute_vol_target_regime.py --vol-target 0.30 --max-leverage 2` 拆 daily return：
+
+| 波幅分位 | 日數 | 平均曝險 | 策略年化日均 | QQQ 年化日均 | 年化超額 |
+| -------- | ---- | -------- | ------------ | ------------ | -------- |
+| Q1 低波  | 1025 | 2.00x    | 33.1%        | 19.1%        | +14.0%   |
+| Q2       | 1024 | 1.97x    | 44.2%        | 27.6%        | +16.6%   |
+| Q3       | 1024 | 1.54x    | 18.5%        | 18.0%        | +0.6%    |
+| Q4 高波  | 1024 | 1.02x    | 15.2%        | 16.1%        | -0.9%    |
+
+**真正賺超額嘅地方係 Q1/Q2 低波：幾乎滿 2x，食低波趨勢延續。** 到 Q4 高波，策略只係降到約 1x，目的係保命而唔係賺 alpha；高波 regime 本身仲略輸 QQQ。
+
+逐年亦唔係穩贏：2020、2023、2026 YTD 都輸 QQQ，因為 QQQ 單邊強升但策略因高波/選股冇滿倉追晒。真正大贏年份係 2013、2019、2022（少跌）、2024。即係呢套策略嘅心理成本係：**你會喺某啲強 QQQ 年份明顯落後，但長期靠低波加注 + 高波少跌追返。**
+
+### 5.2b 成分拆解：唔係選股 alpha，係 exposure timing
+
+`VT30 cap2` 嘅 return component：
+
+| Component | CAGR / drag | 解讀 |
+| --- | ---: | --- |
+| QQQ buy hold | 19.4% | 基準 |
+| Base top5+QQQ | 19.5% | 選股 + QQQ floor，本身幾乎只係打和 QQQ |
+| Gross vol-target | 29.1% | 把 base return 乘動態曝險，未扣成本 |
+| Financing drag | -1.9%/年 | 借入部分融資成本 |
+| Rebalance cost | -0.5%/年 | 調整曝險成本 |
+| Net vol-target | 26.1% | 扣成本後結果 |
+
+呢張表係最重要嘅反直覺位：**Top5 選股本身唔係 alpha engine；真正 alpha-like 效果係「低波時放大 beta，高波時收縮 beta」嘅 exposure timing。** 選股 + QQQ floor 嘅作用係提供一個回撤略細、行為接近 QQQ 嘅 base，方便 vol-target 用槓桿放大，而唔係靠選股本身大幅跑贏。
+
+### 5.2c QQQ-only 對照：更快，但唔係「住半山」
+
+`scripts/research_vol_target_secret.py` 修正咗最新日價格 `ffill()` 後，可重現 QQQ-only vs Top5+QQQ：
+
+| Case | CAGR | MaxDD | Sharpe | 解讀 |
+| --- | ---: | ---: | ---: | --- |
+| QQQ VT30 cap2 | 27.0% | -41.1% | 0.96 | 最快，但風險已明顯高過 QQQ；似山頂多過半山 |
+| Top5+QQQ VT30 cap2 | 26.1% | -33.9% | 0.94 | 慢少少，但回撤細過 QQQ；先係可落地半山版 |
+| QQQ VT26 cap2 | 24.2% | -36.7% | 0.95 | 接近半山，但回撤仍大過 Top5+QQQ VT26 |
+| Top5+QQQ VT26 cap2 | 24.2% | -30.1% | 0.95 | 保守半山版 |
+
+所以如果目標只係「最高 CAGR」，QQQ-only VT30 反而贏；但如果目標係「跑贏 QQQ 同時回撤唔大過 QQQ」，Top5+QQQ 先有用。**Top5+QQQ 嘅 edge 係把 base portfolio 變得更適合加槓桿，而唔係本身大幅跑贏。**
+
+### 5.2d 實盤揀 VT22 / VT26 / VT30：其實係回撤預算
+
+呢幾個版本唔係「邊個最醒」，而係你肯接受幾多回撤：
+
+| 版本 | CAGR | MaxDD | 平均曝險 | 適合情境 |
+| --- | ---: | ---: | ---: | --- |
+| Top5+QQQ VT22 cap2 | 21.6% | -25.7% | 1.33x | 想明顯低過 QQQ 回撤，接受只係小幅跑贏 |
+| Top5+QQQ VT26 cap2 | 24.2% | -30.1% | 1.49x | 保守主線；回撤 cushion 最大 |
+| Top5+QQQ VT30 cap2 | 26.1% | -33.9% | 1.62x | 進取主線；仍保持回撤細過 QQQ |
+| QQQ VT30 cap2 | 27.0% | -41.1% | 1.64x | 只追 CAGR；唔符合「半山」風險要求 |
+
+實盤規則可以好簡單：
+
+- 如果你最怕 -35% 以上回撤：用 **VT26 cap2**。
+- 如果你接受接近 QQQ 嘅回撤，想要更高 CAGR：用 **VT30 cap2**。
+- 如果你想先細注試 execution / 融資 / 滑點：用 **VT22 cap2** 或 VT26。
+- 唔好用 **QQQ-only VT30** 當主策略；佢證明 vol-target 有力，但回撤已經超出「住半山」定義。
+
+換句話講：**VT30 cap2 係而家最好嘅主攻版；VT26 cap2 係心理同 margin 更易頂嘅長跑版。**
+
+### 5.2e 真正「大幅跑贏」有兩類：半山版 vs 山頂版
+
+如果目標由「跑贏 QQQ 但回撤唔差過 QQQ」放寬到「大幅跑贏 QQQ」，答案會變清楚：
+
+| 類型 | 代表 | CAGR | MaxDD | 解讀 |
+| --- | --- | ---: | ---: | --- |
+| 半山主攻 | Top5+QQQ VT30 cap2 | 26.1% | -33.9% | 大幅跑贏，同時回撤仍細過 QQQ |
+| 半山進取 | Top5+QQQ VT30 cap2.5 | 27.5% | -33.9% | 更高 CAGR，但低波貼 2.5x，margin 壓力大 |
+| 參數進取主候選 | L126 top10 VT34 W40 cap2.5 | 30.3% | -39.8% | 現有 sweep 最高；5% 融資後仍 27.6%，但平均 2.0x 曝險 |
+| 槓桿 ETF 受控 | QLD/TQQQ VT30 cap1-1.5 | 26.5-27.9% | -41% 至 -43% | 用槓桿 ETF 降曝險，仍比 QQQ 深回撤 |
+| 槓桿 ETF 趨勢濾網 | TQQQ QQQ>200D else QQQ | 39.4% | -58.8% | 200D filter 改善 TQQQ，但仍係深回撤 |
+| 槓桿 ETF 趨勢濾網 | QLD QQQ>200D else QQQ | 29.4% | -48.0% | 比 QLD buy-hold 好頂啲，但仍非半山 |
+| 山頂版 | QLD buy hold | 32.4% | -63.7% | 大幅跑贏，但要頂 -60% 以上 |
+| 山頂爆裂版 | TQQQ buy hold | 43.9% | -81.7% | CAGR 最誇張，但心理同倉位風險極端 |
+
+結論唔係「TQQQ 最好」。**大幅跑贏一定係用更多 convex beta / leverage 換返嚟。** 200D trend filter 確實可以改善 TQQQ buy-hold（-81.7% → -58.8%），但仍然唔係可輕鬆長期持有。 如果要保留「可以長期執行」呢個條件，最合理仍係 Top5+QQQ VT30 cap2；如果只問「點樣大幅跑贏」，QLD/TQQQ buy-hold 或 trend-filter 版本會贏更多，但回撤會深到好多投資者中途斬倉。
+
+`L126 top10 VT34 W40 cap2.5` 係暫時最強「高風險但未到 TQQQ」候選：
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py \
+  --universe-json sp500_top_10_market_cap_2010_2026.json \
+  --top-n 10 --index-floor QQQ \
+  --vol-target 0.34 --vol-window 40 --max-leverage 2.5 --rebal-band 0.05 \
+  --financing-rate 0.03 --rebalance monthly --cost-bps 15 \
+  --start 2010-01-01 --output-csv '' --plot-path ''
+```
+
+關鍵數字：
+
+- 3% 融資：**30.3% CAGR / -39.8% MaxDD / Sharpe 0.97 / 平均曝險 2.02x**。
+- 5% 融資：**27.6% CAGR / -40.2% MaxDD / Sharpe 0.91**。
+- 剔除 2024 後仍有 **26.7% CAGR**，超 QQQ 約 **+7.7pp**；唔係完全靠 2024，但大年份集中度高。
+- 輸 QQQ 年份包括 2011、2015、2018、2020、2026 YTD；心理成本係高波/單邊 QQQ 年份會明顯落後。
+
+`scripts/stress_test_momentum_candidates.py` 再用融資、成本、起始年、cap 做壓力測試：
+
+| 測試 | Top5 VT30 cap2 | Top10 VT34 cap2.5 | 解讀 |
+| --- | ---: | ---: | --- |
+| 3% 融資 | 26.1% CAGR / -33.9% DD | 30.3% CAGR / -39.8% DD | baseline |
+| 5% 融資 | 24.5% / -34.0% | 27.6% / -40.2% | 兩者仍明顯跑贏 QQQ |
+| 8% 融資 | 22.1% / -34.1% | 23.7% / -40.7% | edge 大幅縮，但仍贏 QQQ；Top10 回撤更深 |
+| 50bps 成本 | 21.2% / -34.7% | 25.2% / -41.8% | 高成本會食走好多 edge |
+| 2014 起步 | 23.5% / -33.9% | 29.9% / -39.8% | Top10 起始年敏感度較低 |
+| 2020 起步 | 26.3% / -33.9% | 35.7% / -39.8% | Top10 受惠 2024 大年更明顯 |
+| Top10 cap2 / cap2.25 / cap2.5 | — | 27.5% / 29.1% / 30.3% CAGR | cap 越高越快，但回撤由 -38.7% 加深到 -39.8% |
+
+壓力測試後嘅排序更清楚：
+
+- **實盤主攻**：Top5 VT30 cap2。5% 融資仍有約 +5.1pp CAGR 超額，回撤仍略細過 QQQ；成本升到 50bps 後只剩 +1.8pp，代表實盤滑點要嚴控。
+- **高風險主候選**：Top10 VT34 cap2.5。CAGR 明顯高一截，8% 融資仍約 +4.3pp 超額；但最大回撤長期比 QQQ 深約 4-6pp，平均曝險約 2x，唔係「半山」。
+- **cap2 折衷版**：Top10 VT34 cap2 有 **27.5% CAGR / -38.7% DD**，比 cap2.5 少約 2.7pp CAGR，但回撤同 margin 壓力細啲。
+
+### 5.2f 今日應該企山腰邊度
+
+主回測而家會輸出最新 realized vol 同 target exposure：
+
+```sh
+uv run python scripts/backtest_momentum_rotation.py \
+  --universe-json sp500_top_10_market_cap_2010_2026.json \
+  --top-n 5 --index-floor QQQ \
+  --vol-target 0.30 --vol-window 40 --max-leverage 2 --rebal-band 0.05 \
+  --financing-rate 0.03 --rebalance monthly --cost-bps 15 \
+  --start 2010-01-01 --output-csv '' --plot-path ''
+```
+
+2026-06-15 snapshot：
+
+| 指標 | 數值 |
+| --- | --- |
+| 最新實際波幅 | 21.8% |
+| 最新目標曝險 | 1.37x |
+| 最新有效曝險 | 1.38x |
+
+解讀：而家唔係低波滿倉 2x，也唔係高波縮到 1x；係中間偏保守嘅 **1.4x 山腰位**。呢個數先係實盤每日要跟嘅核心，不係長期平均 1.62x。
+
+### 5.3 年份集中度：2024 好重要，但唔係唯一支柱
+
+`attribute_vol_target_regime.py` 加咗 leave-one-year-out 後，`VT30 cap2` 嘅超額來源更清楚：
+
+| 最強超額年份 | 策略 | QQQ | 超額 |
+| ------------ | ---- | --- | ---- |
+| 2024         | 83.7% | 25.6% | +58.1% |
+| 2013         | 68.0% | 36.6% | +31.4% |
+| 2019         | 61.9% | 39.0% | +23.0% |
+| 2010         | 33.0% | 18.4% | +14.6% |
+| 2011         | 16.9% | 3.5%  | +13.5% |
+
+| 最差超額年份 | 策略 | QQQ | 超額 |
+| ------------ | ---- | --- | ---- |
+| 2026 YTD     | -6.6% | 21.3% | -27.9% |
+| 2020         | 30.4% | 48.4% | -18.0% |
+| 2023         | 39.5% | 54.9% | -15.3% |
+| 2015         | 4.2%  | 9.4%  | -5.2%  |
+| 2018         | -1.4% | -0.1% | -1.2%  |
+
+剔除單一年重新計 CAGR：
+
+| 剔除年份 | 策略 CAGR | QQQ CAGR | 超額 CAGR |
+| -------- | --------- | -------- | --------- |
+| 2024     | 23.0%     | 19.1%    | +4.0pp    |
+| 2013     | 23.8%     | 18.4%    | +5.4pp    |
+| 2019     | 24.1%     | 18.3%    | +5.8pp    |
+
+即係：**2024 係最大貢獻年，冇咗 2024，edge 由 +6.6pp 收窄到 +4.0pp，但仍然跑贏。** 呢套唔係完全靠單一年神蹟，但確實靠少數「低波 + base portfolio 大贏」年份拉開距離。實盤心理上要接受 2020/2023 呢類 QQQ 爆升年份會輸一大截。
 
 ---
 
@@ -214,8 +385,11 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 | `scripts/backtest_momentum_rotation.py`     | 主回測：修前視（shift 1）、成本（--cost-bps）、monthly rebalance、`--top-n`、`--index-floor`、`--leverage`、`--universe-lag-years`、`--sweep-lookback` |
 | `scripts/sweep_vol_target_momentum.py`      | 掃 `lookback/top_n/vol-target/window/cap`，搵大幅跑贏 QQQ 但回撤不差過 QQQ 嘅候選                                                                             |
 | `scripts/research_vol_target_secret.py`     | 拆解固定槓桿 vs vol-target，輸出平均/低波/高波曝險、融資 drag、調倉成本                                                                                      |
+| `scripts/research_leveraged_etf_vol_target.py` | 測 QQQ/QLD/TQQQ buy-hold 同 vol-target，確認「大幅跑贏」其實係更深回撤換回報                                                                             |
+| `scripts/attribute_vol_target_regime.py`    | 拆解 vol-target 策略喺低波/高波/逐年嘅 return attribution，確認「住半山」贏喺邊、輸喺邊                                                                      |
+| `scripts/stress_test_momentum_candidates.py` | 對 Top5/Top10 vol-target 候選做融資、成本、起始年、cap 壓力測試                                                                                           |
 | `scripts/pit_backtest_momentum_rotation.py` | survivorship-free 闊池 engine：point-in-time membership + 退市股票處理（食 Norgate/CRSP CSV，`--demo` 有合成示範）                                     |
-| `scripts/simulate_momentum_rotation.py`     | Futu 模擬盤落單：`--top-n --index-floor --leverage`                                                                                                    |
+| `scripts/simulate_momentum_rotation.py`     | Futu 模擬盤落單：`--top-n --index-floor --leverage` / `--vol-target` / `--rebal-band`                                                                 |
 | `algo_trading/market_cap_universe.py`       | 年度 + 季度（dated）point-in-time universe，含 lag                                                                                                     |
 | `pine/vol_target_strategy.pine`             | TradingView vol-target strategy（單一標的；要開 margin 先贏，靠槓桿）                                                                                  |
 | `STRATEGY.md`                               | top5 + QQQ 托底 × 1.15 完整規格                                                                                                                        |

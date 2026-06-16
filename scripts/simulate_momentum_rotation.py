@@ -33,6 +33,7 @@ from algo_trading.momentum_rotation import (
     momentum_score_table,
     select_rotation_targets,
 )
+from algo_trading.price_history import get_price_history_yf
 from algo_trading.risk_manager import (
     cancel_open_orders,
     get_account_summary,
@@ -100,6 +101,19 @@ def main() -> None:
         default=str(STATE_PATH),
         help="記錄 live rebalance cadence 嘅 state file。",
     )
+    parser.add_argument(
+        "--force-rebalance",
+        action="store_true",
+        help="無視 monthly/weekly gate，今次強制換 basket（首次上倉用）。"
+        "成功落單後一樣會更新 state，之後正常按 cadence 運作。",
+    )
+    parser.add_argument(
+        "--price-source",
+        choices=["futu", "yfinance"],
+        default="futu",
+        help="動量歷史 + 最新價來源。yfinance：批量抽，冇 Futu 60次/30秒限制同每月配額，"
+        "適合闊池（成個 S&P 500）。Futu 只用嚟查帳戶/持倉 + 落單。預設 futu。",
+    )
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
     parser.add_argument("--futu-rsa-file", default=None)
@@ -141,12 +155,18 @@ def main() -> None:
     if args.index_floor and args.index_floor not in trade_symbols:
         trade_symbols.append(args.index_floor)
     trade_codes = [futu_us_code(symbol) for symbol in trade_symbols]
-    histories_by_code = get_price_history(
-        host=args.futu_host,
-        port=args.futu_port,
-        codes=trade_codes,  # 含 index-floor，vol-target 計 base portfolio 波幅要用
-        max_count=args.lookback_days + 2,
-    )
+    if args.price_source == "yfinance":
+        histories_by_code = get_price_history_yf(
+            codes=trade_codes,  # 含 index-floor，vol-target 計 base portfolio 波幅要用
+            max_count=args.lookback_days + 2,
+        )
+    else:
+        histories_by_code = get_price_history(
+            host=args.futu_host,
+            port=args.futu_port,
+            codes=trade_codes,
+            max_count=args.lookback_days + 2,
+        )
     histories_all = {
         code.removeprefix("US."): history for code, history in histories_by_code.items()
     }
@@ -161,11 +181,24 @@ def main() -> None:
         lookback_days=args.lookback_days,
         top_n=args.top_n,
     )
-    prices = get_latest_prices(
-        host=args.futu_host,
-        port=args.futu_port,
-        codes=trade_codes,
-    )
+    if args.price_source == "yfinance":
+        # 只需揀中嘅 target + floor 嘅最新價落單，唔使成池抽。
+        selected_codes = [futu_us_code(str(t.ticker)) for t in targets]
+        if args.index_floor:
+            selected_codes.append(futu_us_code(args.index_floor))
+        # 已有歷史，最後一根收市即最新價，避免再抽一轉。
+        prices = {
+            code: float(histories_all[code.removeprefix("US.")]["close"].iloc[-1])
+            for code in dict.fromkeys(selected_codes)
+            if code.removeprefix("US.") in histories_all
+            and not histories_all[code.removeprefix("US.")].empty
+        }
+    else:
+        prices = get_latest_prices(
+            host=args.futu_host,
+            port=args.futu_port,
+            codes=trade_codes,
+        )
     score_table = momentum_score_table(
         histories=histories,
         lookback_days=args.lookback_days,
@@ -206,7 +239,7 @@ def main() -> None:
                 rebal_band=args.rebal_band,
             )
 
-    rebalance_due = should_rebalance_today(
+    rebalance_due = args.force_rebalance or should_rebalance_today(
         rebalance=args.rebalance,
         state=load_strategy_state(Path(args.state_path)),
     )

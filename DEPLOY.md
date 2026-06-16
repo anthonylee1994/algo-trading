@@ -203,6 +203,8 @@ rm STOP_TRADING
 
 每日 runner 會啟動 Futu OpenD，等 API port ready，落模擬盤 order，完成後停止 Futu OpenD。呢個 project 無真錢交易 path。
 
+Runner 跑緊嘅策略 = 闊池 S&P 500 動量集中（STRATEGY.md §9）：由 root 嘅 `sp500_constituents.csv`（成個 S&P 500）揀 126 日動量最強 top10、等權、QQQ 托底、**無槓桿**。信號 + 最新價用 **yfinance**（避開 Futu 歷史 K 線 60 次/30 秒頻率限制同每月配額），Futu 只負責查帳戶/持倉 + 落模擬單。Runner 內部按 `REBALANCE`（預設 monthly）gate：每月先換 basket，其餘日子 no-op，所以可以日日 cron 唔會 churn。
+
 部署後設定 executable：
 
 ```sh
@@ -236,9 +238,24 @@ tail -f logs/daily_trade.log
 
 Runner 支援以下 env override：
 
-- `MAX_DAILY_ORDERS`
-- `MAX_DAILY_NOTIONAL`
-- `MAX_SINGLE_ORDER_NOTIONAL`
+策略 / universe：
+
+- `SP500_CSV`（S&P 500 list 路徑，預設 `$APP_DIR/sp500_constituents.csv`）
+- `TOP_N`（持倉數量，預設 10）
+- `INDEX_FLOOR`（空位托底 symbol，預設 QQQ）
+- `LOOKBACK_DAYS`（動量回望，預設 126）
+- `REBALANCE`（換 basket 頻率 daily/weekly/monthly，預設 monthly）
+- `PRICE_SOURCE`（信號 + 最新價來源 yfinance/futu，預設 yfinance）
+
+連線 / 風控：
+
+- `FUTU_HOST`、`FUTU_PORT`
+- `READY_TIMEOUT_SECONDS`（等 OpenD ready 上限，預設 180）
+- `MAX_DAILY_ORDERS`（預設 40）
+- `MAX_DAILY_NOTIONAL`（預設 5000000）
+- `MAX_SINGLE_ORDER_NOTIONAL`（預設 1000000）
+
+> `MAX_DAILY_NOTIONAL` 預設調高到 5M：闊池 top10 basket 喺百萬級戶口，月度全換倉（賣舊買新）notional 可達 ~2M，1M 會唔夠落單。
 
 ## 8. 更新部署
 

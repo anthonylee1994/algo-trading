@@ -44,8 +44,11 @@ uv run python main.py \
 	--futu-host "$FUTU_HOST" \
 	--futu-port "$FUTU_PORT" \
 	--execute \
-	--symbols NVDA TSM AVGO MSFT GOOG AMZN MU COIN MRK NBIS NDAQ HOOD IBM AXP HON AAPL ETN JPM GEV IBKR \
 	--top-n 2 \
+	--index-floor QQQ \
+	--vol-target 0.26 \
+	--vol-window 40 \
+	--max-leverage 1 \
 	--cancel-open-orders \
 	--max-daily-orders "${MAX_DAILY_ORDERS:-20}" \
 	--max-daily-notional "${MAX_DAILY_NOTIONAL:-1000000}" \

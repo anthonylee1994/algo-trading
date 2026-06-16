@@ -75,6 +75,37 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 **Bullish FVG 後回報唔升反而略低過基準；Bearish FVG 後仲係正數。勝率 50-60% = 市場自然 base rate。** 即係 FVG 方向 = 噪音，冇預測力。可交易版：continuation long-only 3%、long/short -17%，全輸 buy-hold。
 **Scope**：呢個係 FVG **孤立**測試。正宗 ICT 要 HTF bias + liquidity + structure + kill zone confluence，嗰套係自由心證、不可證偽。證到嘅係「**FVG 單獨冇 edge**」。
 
+### 2c. VIX 擇時 / 買恐慌（contrarian）—— 同 vol-target 啱啱相反
+
+筆記思路「VIX 30+ 買股、跌深加碼」= 高波加倉。實測（QQQ + ^VIX，含融資）：
+
+| 2010+ | CAGR | Sharpe | 最大回撤 |
+| --- | --- | --- | --- |
+| 買入持有 QQQ | 19.5% | **0.97** | -35% |
+| VIX 高位加槓桿（買恐慌） | 20.8% | 0.86 | -43% |
+| 回撤加槓桿（跌越深揸越多） | 21.9% | 0.89 | -45% |
+| 回撤加碼（持現金版） | 17.1% | 0.94 | -32% |
+| **對照：vol-target（高波減倉，相反）** | **23.7%** | 0.93 | -36% |
+
+全期（含 2008）「買恐慌」最大回撤 **-72% 到 -76%**（喺崩盤中途加槓桿，仲跌就放大）。**raw CAGR 牛市有時高啲，但 Sharpe 更差、回撤恐怖；用 margin 做會爆倉。** 反而相反嘅 vol-target（高波減倉）先風險調整最優。持現金版輸（cash drag）。
+
+### 2d. Long Call 撈底（筆記核心，BS 定價）
+
+筆記嗰套「QQQ 回 15% → 買 1 年 15% 價內 Long Call」。Black-Scholes 定價（IV 用 VIX×1.1）：
+
+逐筆（18 次撈底訊號）：Long Call 平均 **+44.7%** vs 正股 +15.9%，但**最大蝕 -92%**、勝率 61%。成敗 100% 取決於「個 dip 係咪近底」—— 熊市初段 -15% 觸發會連環中招（2008 連 4 鋪 -90%）。
+
+組合層（90% QQQ + 每 dip 5% call，每日 MTM，扣摩擦）：
+
+| | CAGR | Sharpe | 最大回撤 |
+| --- | --- | --- | --- |
+| 純 QQQ（全期 2007+） | 16.7% | 0.81 | -53% |
+| 核心 + 5% dip call | 16.5% | 0.76 | -62% |
+| 核心 + 10% dip call | 16.0% | 0.69 | -71% |
+
+**機械化嘅撈底 call overlay 三項全輸 buy-hold**（2008 連環 -90% call 拖累 + 惡化回撤）。2010+ 只加 ~1pp CAGR 但 Sharpe 更低、回撤更深。
+**但對筆記公道**：呢個測試冇咗筆記精髓 —— discretionary 止蝕（feel 唔對就走）、避開熊市第一個 dip、同**個股 call 選股**（「贏五倍靠 MU/SNDK/AMD」）。即係策略能唔能贏，100% 取決於 **backtest 唔到嘅擇時/止蝕/選股紀律**，唔係機械規則。
+
 ---
 
 ## 3. Universe / 選股 —— 闊池都贏唔到

@@ -161,7 +161,9 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 | ------------------------------------------------- | ----- | ------ | -------- | ---------------------------- |
 | top5 動量 + QQQ 托底（乾淨，無槓桿）              | 19.5% | 0.95   | -30.6%   | risk-adjusted 微贏（回撤細） |
 | 上者 + **1.15x 槓桿**                             | 21.7% | 0.93   | -34.6%   | 同風險、更高回報             |
-| 上者 + **vol-target 26%**（vol-managed momentum） | 24.3% | 0.95   | -29.6%   | 最強組合（2010+）            |
+| 上者 + **vol-target 26% cap2**（vol-managed momentum） | 24.2% | 0.95   | -30.1%   | 穩陣「住半山」版本           |
+| 上者 + **vol-target 30% cap2**                    | 26.1% | 0.94   | -33.9%   | 大幅跑贏版，回撤仍細過 QQQ  |
+| 上者 + **vol-target 30% cap2.5**                  | 27.4% | 0.93   | -33.9%   | 進取版，低波貼近 2.5x       |
 | 單一 QQQ + vol-target（**要槓桿**，cap 2x）       | ~25%  | ~0.95  | ~-36%    | 無槓桿則輸（18.1% < 19.7%）  |
 
 **機制**：
@@ -172,7 +174,7 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 
 ### 5.1 「住半山」嘅秘密：唔係永遠加槓桿，而係低波上山、高波落山
 
-用 `scripts/research_vol_target_secret.py` 拆開固定槓桿 vs vol-target 後，最清楚嘅答案係：
+用 `scripts/research_vol_target_secret.py` 同 `scripts/sweep_vol_target_momentum.py` 拆開固定槓桿 vs vol-target 後，最清楚嘅答案係：
 
 | Case                    | CAGR  | 最大回撤 | Sharpe | 平均曝險 | 低波曝險 | 高波曝險 | 融資 drag | 調倉成本 |
 | ----------------------- | ----- | -------- | ------ | -------- | -------- | -------- | --------- | -------- |
@@ -181,14 +183,17 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 | QQQ VT 26 cap2          | 24.2% | -36.7%   | 0.95   | 1.51x    | 1.77x    | 1.16x    | 1.66%     | 0.56%    |
 | top5+QQQ fixed 1.15x    | 21.9% | -34.6%   | 0.94   | 1.15x    | 1.15x    | 1.15x    | 0.45%     | 0.01%    |
 | **top5+QQQ VT 26 cap2** | 24.4% | -30.1%   | 0.95   | 1.49x    | 1.78x    | 1.08x    | 1.61%     | 0.53%    |
+| **top5+QQQ VT 30 cap2** | 26.1% | -33.9%   | 0.94   | 1.62x    | 2.00x    | 1.02x    | 1.92%     | 0.46%    |
+| **top5+QQQ VT 30 cap2.5** | 27.4% | -33.9% | 0.93   | 1.77x    | 2.48x    | 1.02x    | 2.40%     | 0.76%    |
 | top5+QQQ VT 22 cap2     | 21.8% | -25.7%   | 0.96   | 1.33x    | 1.57x    | 0.99x    | 1.21%     | 0.63%    |
 
 **秘密唔係「1.5x 長揸」**。固定 1.5x QQQ CAGR 高，但最大回撤去到 -50% 左右，Sharpe 反而差。真正有用嘅係 **vol-timed leverage**：
 
 - 平靜市（低 realized vol）升到約 **1.7-1.8x**，食足牛市 trend。
 - 風大時（高 realized vol）降到約 **1.0-1.2x**，唔係清倉，係「住半山」：仲有 exposure，但唔企山頂硬食瀑布。
-- 配合 `top5 + QQQ 托底` 本身回撤細過 QQQ，vol-target 26% cap2 先做到 **24% CAGR 但回撤約 -30%**。
-- 5% 融資壓力下仍然成立：`top5+QQQ VT 26 cap2` 約 **23.1% CAGR / -30.1% 回撤**；edge 會縮，但唔係靠 3% 融資假設先有。
+- 配合 `top5 + QQQ 托底` 本身回撤細過 QQQ，vol-target 26% cap2 做到 **24% CAGR / -30% 回撤**；再提高到 30% target vol，做到 **26% CAGR / -34% 回撤**，仍細過 QQQ 約 -35%。
+- 5% 融資壓力下仍然成立，但 edge 會縮：`top5+QQQ VT 30 cap2` 約 **24.5% CAGR / -34.0% 回撤**；`cap2.5` 約 **25.4% CAGR / -34.0% 回撤**。
+- `VT30 cap2.5` 係目前最高可接受候選，但低波會貼住 **2.5x**，融資同 margin 壓力大；實盤更合理嘅第一版本係 `VT30 cap2` 或保守嘅 `VT26 cap2`。
 
 所以「跑贏 QQQ」嘅實際結構係：**先搵一個 Sharpe 接近 QQQ、回撤較細嘅 base portfolio，再用 vol-target 把曝險搬去低波 regime；唔係再搵 RSI/MACD 呢啲訊號。**
 
@@ -207,6 +212,8 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 | 檔案                                        | 用途                                                                                                                                                   |
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `scripts/backtest_momentum_rotation.py`     | 主回測：修前視（shift 1）、成本（--cost-bps）、monthly rebalance、`--top-n`、`--index-floor`、`--leverage`、`--universe-lag-years`、`--sweep-lookback` |
+| `scripts/sweep_vol_target_momentum.py`      | 掃 `lookback/top_n/vol-target/window/cap`，搵大幅跑贏 QQQ 但回撤不差過 QQQ 嘅候選                                                                             |
+| `scripts/research_vol_target_secret.py`     | 拆解固定槓桿 vs vol-target，輸出平均/低波/高波曝險、融資 drag、調倉成本                                                                                      |
 | `scripts/pit_backtest_momentum_rotation.py` | survivorship-free 闊池 engine：point-in-time membership + 退市股票處理（食 Norgate/CRSP CSV，`--demo` 有合成示範）                                     |
 | `scripts/simulate_momentum_rotation.py`     | Futu 模擬盤落單：`--top-n --index-floor --leverage`                                                                                                    |
 | `algo_trading/market_cap_universe.py`       | 年度 + 季度（dated）point-in-time universe，含 lag                                                                                                     |

@@ -174,13 +174,13 @@ def main() -> None:
         [charts[symbol]["adj_close"].rename(symbol) for symbol in symbols],
         axis=1,
         join="outer",
-    ).sort_index()
+    ).sort_index().ffill().dropna(how="all")
     close_prices.index = pd.to_datetime(close_prices.index)
     raw_close_prices = pd.concat(
         [charts[symbol]["close"].rename(symbol) for symbol in symbols],
         axis=1,
         join="outer",
-    ).sort_index()
+    ).sort_index().ffill().dropna(how="all")
     raw_close_prices.index = pd.to_datetime(raw_close_prices.index)
 
     print_data_coverage(close_prices, strategy_symbols, args.start)

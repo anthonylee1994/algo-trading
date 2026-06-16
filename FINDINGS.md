@@ -17,13 +17,13 @@
 
 調查途中，每個睇落靚到震嘅策略，擠走偏差之後都貼返地：
 
-| 偏差 | 例子 | 影響 |
-| --- | --- | --- |
-| **Survivorship（倖存者）** | 手揀今日 20 隻贏家做 universe | CAGR 虛高到 41%，乾淨後 ~15-30% |
-| **Lookahead（前視）— 信號同成交同一根** | 用收市計又用收市成交 | momentum 虛高 |
-| **Lookahead — universe membership** | 用「年底」市值名單交易嗰一整年 | CAGR 由 15.6% 谷到 30.8% |
-| **Selection bias（自選樣本）** | 我自己揀 103 隻今日大盤股做「闊池」 | 假裝大贏，換成真 S&P 500 即失效 |
-| **In-sample 過度擬合** | tune lookback / top_n 到最靚 | OOS 即衰過唔 tune |
+| 偏差                                    | 例子                                | 影響                            |
+| --------------------------------------- | ----------------------------------- | ------------------------------- |
+| **Survivorship（倖存者）**              | 手揀今日 20 隻贏家做 universe       | CAGR 虛高到 41%，乾淨後 ~15-30% |
+| **Lookahead（前視）— 信號同成交同一根** | 用收市計又用收市成交                | momentum 虛高                   |
+| **Lookahead — universe membership**     | 用「年底」市值名單交易嗰一整年      | CAGR 由 15.6% 谷到 30.8%        |
+| **Selection bias（自選樣本）**          | 我自己揀 103 隻今日大盤股做「闊池」 | 假裝大贏，換成真 S&P 500 即失效 |
+| **In-sample 過度擬合**                  | tune lookback / top_n 到最靚        | OOS 即衰過唔 tune               |
 
 **結論：紀律慳你錢多過幫你贏錢。** 大部分人蝕錢，係因為信咗一個未擠走偏差嘅 backtest。
 
@@ -31,20 +31,20 @@
 
 ## 2. 技術分析 —— 全軍覆沒
 
-| 方法 | 結果 vs 長揸 QQQ |
-| --- | --- |
-| 動量輪動（126/63/252 日） | 輸 Sharpe |
-| Skip-month 12-1（學術經典） | 更差 |
-| 多時框 blend / inverse-vol 加權 | 更差 |
-| 200 日趨勢濾網 | whipsaw，更差 |
-| **SCTR**（StockCharts 綜合排名） | 更差 |
-| **Faber 10 個月 SMA 擇時** | 減回撤但 CAGR 大跌 |
-| **MACD**（金叉/零軸/長短） | 慘敗（whipsaw + 成本） |
-| Connors RSI(2) / 布林帶 mean-reversion | CAGR 1-3%，長期空倉 |
-| Donchian 突破（海龜式） | CAGR ~5% |
-| 雙均線 50/200 | 打和略輸 |
+| 方法                                                             | 結果 vs 長揸 QQQ       |
+| ---------------------------------------------------------------- | ---------------------- |
+| 動量輪動（126/63/252 日）                                        | 輸 Sharpe              |
+| Skip-month 12-1（學術經典）                                      | 更差                   |
+| 多時框 blend / inverse-vol 加權                                  | 更差                   |
+| 200 日趨勢濾網                                                   | whipsaw，更差          |
+| **SCTR**（StockCharts 綜合排名）                                 | 更差                   |
+| **Faber 10 個月 SMA 擇時**                                       | 減回撤但 CAGR 大跌     |
+| **MACD**（金叉/零軸/長短）                                       | 慘敗（whipsaw + 成本） |
+| Connors RSI(2) / 布林帶 mean-reversion                           | CAGR 1-3%，長期空倉    |
+| Donchian 突破（海龜式）                                          | CAGR ~5%               |
+| 雙均線 50/200                                                    | 打和略輸               |
 | **ICT**（Fair Value Gap / Break of Structure / Liquidity Sweep） | 全部大輸（1-11% CAGR） |
-| 成交量訊號（OBV / MFI / 放量避險 / 量價齊升） | 噪音內或幫倒手 |
+| 成交量訊號（OBV / MFI / 放量避險 / 量價齊升）                    | 噪音內或幫倒手         |
 
 **共通原因**：任何擇時/形態都會喺某啲時候減倉；喺強趨勢牛市，每次踏空 = 直接蝕回報。
 
@@ -52,14 +52,14 @@
 
 ## 3. Universe / 選股 —— 闊池都贏唔到
 
-| Universe | CAGR | Sharpe | 備註 |
-| --- | --- | --- | --- |
-| 手揀 20 隻贏家 | 41.6% | — | survivorship 幻覺 |
-| 每年市值 Top 10（同年快照） | 30.8% | 1.04 | membership 前視 |
-| 每年市值 Top 10（**滯後 1 年，乾淨**） | **15.6%** | 0.69 | **輸 QQQ** |
-| 103 隻手揀今日大盤股 | 24-41% | 1.1+ | 我自己 selection bias |
-| 完整 S&P 500（497 隻，date-added，仍 survivorship） | 14-25% | 0.78-0.91 | **冇一個贏 QQQ Sharpe** |
-| 齊頭持有全 S&P 500 | 18.0% | 1.01 | momentum overlay 都贏佢唔到 |
+| Universe                                            | CAGR      | Sharpe    | 備註                        |
+| --------------------------------------------------- | --------- | --------- | --------------------------- |
+| 手揀 20 隻贏家                                      | 41.6%     | —         | survivorship 幻覺           |
+| 每年市值 Top 10（同年快照）                         | 30.8%     | 1.04      | membership 前視             |
+| 每年市值 Top 10（**滯後 1 年，乾淨**）              | **15.6%** | 0.69      | **輸 QQQ**                  |
+| 103 隻手揀今日大盤股                                | 24-41%    | 1.1+      | 我自己 selection bias       |
+| 完整 S&P 500（497 隻，date-added，仍 survivorship） | 14-25%    | 0.78-0.91 | **冇一個贏 QQQ Sharpe**     |
+| 齊頭持有全 S&P 500                                  | 18.0%     | 1.01      | momentum overlay 都贏佢唔到 |
 
 **結論**：momentum 篩選喺廣泛大盤股冇加風險調整價值。「闊 universe = 真 alpha」假設**證偽**。
 
@@ -69,15 +69,15 @@
 
 用投資得到嘅因子 ETF 做乾淨測試（2016-2026，無 survivorship/前視）：
 
-| 因子 ETF | CAGR | Sharpe |
-| --- | --- | --- |
+| 因子 ETF        | CAGR      | Sharpe   |
+| --------------- | --------- | -------- |
 | **QQQ（基準）** | **22.1%** | **0.99** |
-| MTUM 動量 | 18.2% | 0.88 |
-| QUAL 質素 | 14.6% | 0.83 |
-| VLUE 價值 | 14.7% | 0.78 |
-| COWZ 自由現金流 | 12.8% | 0.70 |
-| USMV 低波動 | 10.3% | 0.74 |
-| VTV 大型價值 | 12.1% | 0.76 |
+| MTUM 動量       | 18.2%     | 0.88     |
+| QUAL 質素       | 14.6%     | 0.83     |
+| VLUE 價值       | 14.7%     | 0.78     |
+| COWZ 自由現金流 | 12.8%     | 0.70     |
+| USMV 低波動     | 10.3%     | 0.74     |
+| VTV 大型價值    | 12.1%     | 0.76     |
 
 **全部輸。** `../stock-screener` 個 screen 嘅 value+quality+FCF flavor（≈ VLUE/QUAL/COWZ）正正係最弱嗰批。
 **注意**：呢個係 regime bet —— value 喺 value 當道年代會反贏，但你揀 QQQ 做對手就係揀咗 value 最唔利嘅戰場。screener 唔廢，係 regime hedge / value watchlist，唔係 QQQ-killer。
@@ -86,14 +86,15 @@
 
 ## 5. 唯一 work 嘅嘢（全部唔係「新指標」）
 
-| 做法 | CAGR | Sharpe | 最大回撤 | 性質 |
-| --- | --- | --- | --- | --- |
-| top5 動量 + QQQ 托底（乾淨，無槓桿） | 19.5% | 0.95 | -30.6% | risk-adjusted 微贏（回撤細） |
-| 上者 + **1.15x 槓桿** | 21.7% | 0.93 | -34.6% | 同風險、更高回報 |
-| 上者 + **vol-target 26%**（vol-managed momentum） | 24.3% | 0.95 | -29.6% | 最強組合（2010+） |
-| 單一 QQQ + vol-target（**要槓桿**，cap 2x） | ~25% | ~0.95 | ~-36% | 無槓桿則輸（18.1% < 19.7%） |
+| 做法                                              | CAGR  | Sharpe | 最大回撤 | 性質                         |
+| ------------------------------------------------- | ----- | ------ | -------- | ---------------------------- |
+| top5 動量 + QQQ 托底（乾淨，無槓桿）              | 19.5% | 0.95   | -30.6%   | risk-adjusted 微贏（回撤細） |
+| 上者 + **1.15x 槓桿**                             | 21.7% | 0.93   | -34.6%   | 同風險、更高回報             |
+| 上者 + **vol-target 26%**（vol-managed momentum） | 24.3% | 0.95   | -29.6%   | 最強組合（2010+）            |
+| 單一 QQQ + vol-target（**要槓桿**，cap 2x）       | ~25%  | ~0.95  | ~-36%    | 無槓桿則輸（18.1% < 19.7%）  |
 
 **機制**：
+
 - **波動率目標**（Moreira-Muir 2017）：曝險 = 目標波幅 / 實際波幅。平靜加注、波動減注。唯一有學術根據又跨參數穩健嘅 TA，但本質係**擇時槓桿 + 減回撤**。
 - **槓桿**：把「回撤比 QQQ 細」嘅裕度換成回報。
 - 兩者 raw return 提升都靠 leverage，唔係無中生有嘅 alpha；融資成本 + 跌市槓桿放大損失要計。
@@ -110,14 +111,14 @@
 
 ## 7. 已建立嘅工具
 
-| 檔案 | 用途 |
-| --- | --- |
-| `scripts/backtest_momentum_rotation.py` | 主回測：修前視（shift 1）、成本（--cost-bps）、monthly rebalance、`--top-n`、`--index-floor`、`--leverage`、`--universe-lag-years`、`--sweep-lookback` |
-| `scripts/pit_backtest_momentum_rotation.py` | survivorship-free 闊池 engine：point-in-time membership + 退市股票處理（食 Norgate/CRSP CSV，`--demo` 有合成示範） |
-| `scripts/simulate_momentum_rotation.py` | Futu 模擬盤落單：`--top-n --index-floor --leverage` |
-| `algo_trading/market_cap_universe.py` | 年度 + 季度（dated）point-in-time universe，含 lag |
-| `pine/vol_target_strategy.pine` | TradingView vol-target strategy（單一標的；要開 margin 先贏，靠槓桿） |
-| `STRATEGY.md` | top5 + QQQ 托底 × 1.15 完整規格 |
+| 檔案                                        | 用途                                                                                                                                                   |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `scripts/backtest_momentum_rotation.py`     | 主回測：修前視（shift 1）、成本（--cost-bps）、monthly rebalance、`--top-n`、`--index-floor`、`--leverage`、`--universe-lag-years`、`--sweep-lookback` |
+| `scripts/pit_backtest_momentum_rotation.py` | survivorship-free 闊池 engine：point-in-time membership + 退市股票處理（食 Norgate/CRSP CSV，`--demo` 有合成示範）                                     |
+| `scripts/simulate_momentum_rotation.py`     | Futu 模擬盤落單：`--top-n --index-floor --leverage`                                                                                                    |
+| `algo_trading/market_cap_universe.py`       | 年度 + 季度（dated）point-in-time universe，含 lag                                                                                                     |
+| `pine/vol_target_strategy.pine`             | TradingView vol-target strategy（單一標的；要開 margin 先贏，靠槓桿）                                                                                  |
+| `STRATEGY.md`                               | top5 + QQQ 托底 × 1.15 完整規格                                                                                                                        |
 
 ---
 

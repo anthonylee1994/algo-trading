@@ -8,7 +8,12 @@ from algo_trading.market_cap_universe import (
     symbols_for_date,
     symbols_for_schedule,
 )
-from scripts.backtest_momentum_rotation import build_target_weights
+from scripts.backtest_momentum_rotation import (
+    apply_exposure_returns,
+    apply_rebalance_band,
+    build_target_weights,
+    build_vol_target_exposure,
+)
 
 
 def test_symbols_for_date_lags_one_year_to_avoid_lookahead() -> None:
@@ -128,3 +133,65 @@ def test_build_target_weights_limits_candidates_to_lagged_universe() -> None:
     assert weights.loc["2021-01-01", "NVDA"] == 0.0
     assert weights.loc["2021-01-04", "AAPL"] == 1.0
     assert weights.loc["2021-01-04", "NVDA"] == 0.0
+
+
+def test_build_vol_target_exposure_uses_shifted_realized_vol() -> None:
+    returns = pd.Series(
+        [0.01, 0.01, 0.01, 0.03, -0.02],
+        index=pd.date_range("2024-01-01", periods=5),
+    )
+
+    exposure = build_vol_target_exposure(
+        base_returns=returns,
+        target_vol=0.20,
+        vol_window=2,
+        max_leverage=2.0,
+        rebal_band=0.0,
+    )
+
+    raw = (0.20 / (returns.rolling(2).std() * (252.0**0.5))).clip(
+        lower=0.0,
+        upper=2.0,
+    )
+    expected = raw.shift(1).fillna(0.0)
+
+    pd.testing.assert_series_equal(exposure, expected)
+
+
+def test_build_vol_target_exposure_respects_rebalance_band() -> None:
+    target = pd.Series(
+        [0.0, 1.00, 1.03, 1.10],
+        index=pd.date_range("2024-01-01", periods=4),
+    )
+
+    # 1.00 -> 1.03 差距細過 band，應維持 1.00；到 1.10 先調。
+    banded = apply_rebalance_band(target, rebal_band=0.05)
+
+    assert list(banded.round(2)) == [0.0, 1.0, 1.0, 1.1]
+
+
+def test_apply_exposure_returns_deducts_financing_and_turnover_cost() -> None:
+    returns = pd.Series(
+        [0.01, 0.02],
+        index=pd.date_range("2024-01-01", periods=2),
+    )
+    exposure = pd.Series(
+        [1.5, 1.0],
+        index=returns.index,
+    )
+
+    result = apply_exposure_returns(
+        base_returns=returns,
+        exposure=exposure,
+        financing_rate=0.252,
+        cost_bps=10,
+    )
+
+    expected = pd.Series(
+        [
+            1.5 * 0.01 - 0.5 * 0.252 / 252 - 1.5 * 0.001,
+            1.0 * 0.02 - 0.0 * 0.252 / 252 - 0.5 * 0.001,
+        ],
+        index=returns.index,
+    )
+    pd.testing.assert_series_equal(result, expected)

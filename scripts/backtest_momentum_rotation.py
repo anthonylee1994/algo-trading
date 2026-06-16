@@ -75,6 +75,30 @@ def main() -> None:
         help="槓桿借入部分嘅年化融資成本（預設 3%%）。",
     )
     parser.add_argument(
+        "--vol-target",
+        type=float,
+        default=None,
+        help="啟用波動率目標曝險（例 0.26 = 26%% 年化波幅）。會覆蓋固定 --leverage summary。",
+    )
+    parser.add_argument(
+        "--vol-window",
+        type=int,
+        default=40,
+        help="vol-target 用幾多個交易日計 realized volatility（預設 40）。",
+    )
+    parser.add_argument(
+        "--max-leverage",
+        type=float,
+        default=2.0,
+        help="vol-target 最大曝險上限（例 2.0 = 2x）。",
+    )
+    parser.add_argument(
+        "--rebal-band",
+        type=float,
+        default=0.05,
+        help="vol-target 目標曝險變動超過呢個幅度先調整，減少換手（預設 0.05x）。",
+    )
+    parser.add_argument(
         "--rebalance",
         choices=["daily", "weekly", "monthly"],
         default="monthly",
@@ -224,7 +248,34 @@ def main() -> None:
     print(f"長揸年化回報：{summary['benchmark_cagr_pct']:.2f}%")
     print(f"長揸最大回撤：{summary['benchmark_max_drawdown_pct']:.2f}%")
     print()
-    if args.leverage and args.leverage != 1.0:
+    if args.vol_target:
+        vol_target = build_vol_target_summary(
+            bt_result=bt_result,
+            target_vol=args.vol_target,
+            vol_window=args.vol_window,
+            max_leverage=args.max_leverage,
+            financing_rate=args.financing_rate,
+            cost_bps=args.cost_bps,
+            rebal_band=args.rebal_band,
+            initial_cash=args.initial_cash,
+        )
+        print(
+            "Vol-target "
+            f"{args.vol_target * 100:.1f}%（window {args.vol_window}D，"
+            f"cap ×{args.max_leverage:g}，band {args.rebal_band:g}，"
+            f"融資 {args.financing_rate * 100:.1f}%/年）："
+        )
+        print(f"最終資產：${vol_target['final_equity']:,.2f}")
+        print(f"年化回報：{vol_target['cagr_pct']:.2f}%")
+        print(f"最大回撤：{vol_target['max_drawdown_pct']:.2f}%")
+        print(f"Sharpe：{vol_target['sharpe']:.2f}")
+        print(f"平均曝險：{vol_target['avg_exposure']:.2f}x")
+        print(f"低波曝險：{vol_target['low_vol_exposure']:.2f}x")
+        print(f"高波曝險：{vol_target['high_vol_exposure']:.2f}x")
+        print(f"融資 drag：約 {vol_target['financing_drag_pct']:.2f}%/年")
+        print(f"調倉成本：約 {vol_target['rebalance_cost_pct']:.2f}%/年")
+        print()
+    elif args.leverage and args.leverage != 1.0:
         levered = build_levered_summary(
             bt_result=bt_result,
             leverage=args.leverage,
@@ -443,6 +494,122 @@ def build_levered_summary(
         "max_drawdown_pct": max_drawdown * 100,
         "sharpe": sharpe,
     }
+
+
+def build_vol_target_summary(
+    bt_result: bt.backtest.Result,
+    target_vol: float,
+    vol_window: int,
+    max_leverage: float,
+    financing_rate: float,
+    cost_bps: float,
+    rebal_band: float,
+    initial_cash: float,
+) -> dict[str, float]:
+    """用 base strategy 日回報計 vol-target 曝險，避免同日信號/成交前視。
+
+    曝險 = target_vol / realized_vol，封頂 max_leverage；用 t 日收市前可知嘅
+    realized vol 決定 t+1 曝險。回報再扣借入部分融資成本同曝險變動成本。
+    """
+    base_prices = bt_result.prices["Momentum Rotation"].dropna()
+    base_returns = base_prices.pct_change().dropna()
+    exposure = build_vol_target_exposure(
+        base_returns=base_returns,
+        target_vol=target_vol,
+        vol_window=vol_window,
+        max_leverage=max_leverage,
+        rebal_band=rebal_band,
+    )
+    returns = apply_exposure_returns(
+        base_returns=base_returns,
+        exposure=exposure,
+        financing_rate=financing_rate,
+        cost_bps=cost_bps,
+    )
+    equity = (1.0 + returns).cumprod()
+    years = len(returns) / 252.0
+    growth = float(equity.iloc[-1])
+    cagr = growth ** (1.0 / years) - 1.0 if years > 0 and growth > 0 else float("nan")
+    max_drawdown = float((equity / equity.cummax() - 1.0).min())
+    std = float(returns.std())
+    sharpe = float(returns.mean() / std * (252.0**0.5)) if std > 0 else float("nan")
+    realized_vol = base_returns.rolling(vol_window).std() * (252.0**0.5)
+    low_vol_cutoff = realized_vol.quantile(0.25)
+    high_vol_cutoff = realized_vol.quantile(0.75)
+    aligned_exposure = exposure.reindex(returns.index).fillna(0.0)
+    borrow = aligned_exposure.sub(1.0).clip(lower=0.0)
+    financing_drag = float(
+        (borrow * financing_rate / 252.0).sum() / len(returns) * 252.0
+    )
+    rebalance_cost = float(
+        (
+            aligned_exposure.diff().abs().fillna(aligned_exposure.abs())
+            * max(cost_bps, 0.0)
+            / 10_000.0
+        ).sum()
+        / len(returns)
+        * 252.0
+    )
+    return {
+        "final_equity": growth * initial_cash,
+        "cagr_pct": cagr * 100,
+        "max_drawdown_pct": max_drawdown * 100,
+        "sharpe": sharpe,
+        "avg_exposure": float(aligned_exposure.mean()),
+        "low_vol_exposure": float(
+            aligned_exposure[realized_vol <= low_vol_cutoff].mean()
+        ),
+        "high_vol_exposure": float(
+            aligned_exposure[realized_vol >= high_vol_cutoff].mean()
+        ),
+        "financing_drag_pct": financing_drag * 100,
+        "rebalance_cost_pct": rebalance_cost * 100,
+    }
+
+
+def build_vol_target_exposure(
+    base_returns: pd.Series,
+    target_vol: float,
+    vol_window: int,
+    max_leverage: float,
+    rebal_band: float,
+) -> pd.Series:
+    realized_vol = base_returns.rolling(max(vol_window, 1)).std() * (252.0**0.5)
+    raw_exposure = target_vol / realized_vol
+    target_exposure = raw_exposure.clip(lower=0.0, upper=max(max_leverage, 0.0))
+    target_exposure = target_exposure.shift(1).fillna(0.0)
+    return apply_rebalance_band(target_exposure, rebal_band)
+
+
+def apply_rebalance_band(target_exposure: pd.Series, rebal_band: float) -> pd.Series:
+    current = 0.0
+    values = []
+    for target in target_exposure.fillna(0.0):
+        target = float(target)
+        if abs(target - current) > max(rebal_band, 0.0):
+            current = target
+        values.append(current)
+    return pd.Series(values, index=target_exposure.index)
+
+
+def apply_exposure_returns(
+    base_returns: pd.Series,
+    exposure: pd.Series,
+    financing_rate: float,
+    cost_bps: float,
+) -> pd.Series:
+    aligned = pd.concat(
+        [base_returns.rename("base"), exposure.rename("exposure")],
+        axis=1,
+        join="inner",
+    ).dropna()
+    borrow = aligned["exposure"].sub(1.0).clip(lower=0.0)
+    financing = borrow * financing_rate / 252.0
+    exposure_turnover = aligned["exposure"].diff().abs().fillna(
+        aligned["exposure"].abs()
+    )
+    rebalance_cost = exposure_turnover * max(cost_bps, 0.0) / 10_000.0
+    return aligned["exposure"] * aligned["base"] - financing - rebalance_cost
 
 
 def build_curve(

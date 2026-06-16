@@ -83,12 +83,23 @@ uv run python scripts/backtest_momentum_rotation.py --start 2010-01-01 --end 202
 - **指數托底（贏 QQQ 嘅最穩配置）**：`--index-floor QQQ`。正動量股票唔夠 `top_n` 隻時，空倉位用 QQQ 補（而唔係攤分／揸現金）。配 `--top-n 5`，無前視無倖存者偏差之下仍然跑贏 QQQ：CAGR 19.4% vs 19.2%、最大回撤 -30.6% vs -35.1%（回報微贏、回撤明顯細）。`--top-n 1` 喺乾淨數據反而最差，集中唔等於賺多。
 
 - **槓桿（真正跑贏 QQQ 回報）**：`--leverage 1.15 --financing-rate 0.03`。`top5 + QQQ 托底` 嘅回撤本身細過 QQQ（-30.6% vs -35.1%），加 1.15x 槓桿把呢個裕度換成超額回報：CAGR 21.7% vs QQQ 19.2%，而回撤 -34.6% 仍 ≤ QQQ。即係同樣風險、更高回報。對融資成本好硬淨（5% 都只蝕 ~0.3pp）。
+- **Vol-target（目前最強「住半山」版本）**：`--vol-target 0.26 --vol-window 40 --max-leverage 2 --rebal-band 0.05`。先跑 `top5 + QQQ 托底` base portfolio，再按 40 日 realized volatility 調曝險：低波加到約 1.8x，高波降到約 1.1x。2010-2026 回測約 CAGR 24.4%、最大回撤 -30.1%。啟用 `--vol-target` 時，輸出會用 vol-target summary；固定 `--leverage` 只作舊版固定槓桿比較。
 
 ```sh
 # 修正後最穩、跑贏 QQQ 嘅配置（風險調整 + 回報都贏）
 uv run python scripts/backtest_momentum_rotation.py \
   --universe-json sp500_top_10_market_cap_2010_2026.json \
   --top-n 5 --index-floor QQQ --leverage 1.15 --start 2010-01-01
+```
+
+```sh
+# 目前最佳版本：Top5 + QQQ 托底，再用 vol-target 26%、cap 2x 管理曝險
+uv run python scripts/backtest_momentum_rotation.py \
+  --universe-json sp500_top_10_market_cap_2010_2026.json \
+  --top-n 5 --index-floor QQQ \
+  --vol-target 0.26 --vol-window 40 --max-leverage 2 --rebal-band 0.05 \
+  --financing-rate 0.03 --rebalance monthly --cost-bps 15 \
+  --start 2010-01-01
 ```
 
 ```sh

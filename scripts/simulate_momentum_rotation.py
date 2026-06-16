@@ -4,6 +4,8 @@ import argparse
 from pathlib import Path
 import sys
 
+import pandas as pd
+
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from futu import OrderType, SysConfig, TrdEnv
@@ -55,7 +57,25 @@ def main() -> None:
         "--leverage",
         type=float,
         default=1.0,
-        help="目標總曝險倍數（例 1.15）。>1 需要孖展戶口，自己評估風險。",
+        help="固定目標總曝險倍數（例 1.15）。>1 需要孖展戶口。如設 --vol-target 會被取代。",
+    )
+    parser.add_argument(
+        "--vol-target",
+        type=float,
+        default=None,
+        help="啟用波動率目標（例 0.26）：曝險 = 目標波幅 / base portfolio 實際波幅，封頂 --max-leverage。覆蓋 --leverage。",
+    )
+    parser.add_argument(
+        "--vol-window",
+        type=int,
+        default=40,
+        help="vol-target 計 realized volatility 用幾多個交易日（預設 40）。",
+    )
+    parser.add_argument(
+        "--max-leverage",
+        type=float,
+        default=2.0,
+        help="vol-target 曝險上限（預設 2.0 = 2x）。",
     )
     parser.add_argument("--futu-host", default="127.0.0.1")
     parser.add_argument("--futu-port", type=int, default=11111)
@@ -102,12 +122,18 @@ def main() -> None:
     histories_by_code = get_price_history(
         host=args.futu_host,
         port=args.futu_port,
-        codes=candidate_codes,
+        codes=trade_codes,  # 含 index-floor，vol-target 計 base portfolio 波幅要用
         max_count=args.lookback_days + 2,
     )
-    histories = {
+    histories_all = {
         code.removeprefix("US."): history
         for code, history in histories_by_code.items()
+    }
+    # 動量只睇 candidate（index-floor 唔計動量）。
+    histories = {
+        symbol: histories_all[symbol]
+        for symbol in candidate_symbols
+        if symbol in histories_all
     }
     targets = select_rotation_targets(
         histories=histories,
@@ -134,6 +160,17 @@ def main() -> None:
         port=args.futu_port,
         trd_env=trd_env,
     )
+    # vol-target：用 base portfolio 近 vol_window 日嘅 realized volatility 動態定槓桿。
+    leverage_eff = args.leverage
+    realized_vol = None
+    if args.vol_target:
+        base_weights = base_portfolio_weights(targets, args.top_n, args.index_floor)
+        realized_vol = base_portfolio_realized_vol(
+            histories_all, base_weights, args.vol_window
+        )
+        if realized_vol and realized_vol > 0:
+            leverage_eff = min(args.vol_target / realized_vol, args.max_leverage)
+
     plan = build_equal_weight_rotation_plan(
         targets=targets,
         prices=prices,
@@ -143,11 +180,19 @@ def main() -> None:
         min_trade_notional=args.min_trade_notional,
         top_n=args.top_n,
         index_floor=args.index_floor,
-        leverage=args.leverage,
+        leverage=leverage_eff,
     )
 
     floor_note = f"，空位用 {args.index_floor} 托底" if args.index_floor else ""
-    leverage_note = f"，槓桿 ×{args.leverage:g}" if args.leverage != 1.0 else ""
+    if args.vol_target and realized_vol:
+        leverage_note = (
+            f"，vol-target {args.vol_target:.0%}：實際波幅 {realized_vol:.0%}"
+            f" → 曝險 ×{leverage_eff:.2f}（封頂 {args.max_leverage:g}）"
+        )
+    elif leverage_eff != 1.0:
+        leverage_note = f"，槓桿 ×{leverage_eff:g}"
+    else:
+        leverage_note = ""
     print(
         {
             "模式": "模擬盤",
@@ -217,6 +262,55 @@ def main() -> None:
     record_order_results(guarded_plan, results)
     for result in results:
         print(result)
+
+
+def base_portfolio_weights(
+    targets: list,
+    top_n: int,
+    index_floor: str | None,
+) -> dict[str, float]:
+    """重建 base portfolio（未槓桿）權重，同 build_equal_weight_rotation_plan 一致。"""
+    weights: dict[str, float] = {}
+    if index_floor and top_n:
+        for target in targets:
+            weights[str(target.ticker)] = weights.get(str(target.ticker), 0.0) + 1.0 / top_n
+        empty = max(top_n - len(targets), 0)
+        if empty > 0:
+            weights[index_floor] = weights.get(index_floor, 0.0) + empty / top_n
+    elif targets:
+        per = 1.0 / len(targets)
+        for target in targets:
+            weights[str(target.ticker)] = per
+    return weights
+
+
+def base_portfolio_realized_vol(
+    histories: dict,
+    weights: dict[str, float],
+    window: int,
+    trading_days: int = 252,
+) -> float | None:
+    """用持倉成分嘅近 window 日加權回報，計 base portfolio 年化 realized volatility。"""
+    if not weights:
+        return None
+    closes: dict[str, pd.Series] = {}
+    for symbol in weights:
+        history = histories.get(symbol)
+        if history is None or "close" not in history:
+            return None
+        closes[symbol] = history["close"].astype(float).reset_index(drop=True)
+    frame = pd.DataFrame(closes).dropna()
+    if len(frame) < 6:
+        return None
+    window = min(window, len(frame) - 1)
+    returns = frame.pct_change().dropna().tail(window)
+    weight_series = pd.Series(weights, dtype=float)
+    weight_series = weight_series / weight_series.sum()
+    portfolio = (returns[list(weight_series.index)] * weight_series).sum(axis=1)
+    std = float(portfolio.std())
+    if std <= 0:
+        return None
+    return std * (trading_days**0.5)
 
 
 if __name__ == "__main__":

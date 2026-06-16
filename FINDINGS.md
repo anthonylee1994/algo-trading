@@ -181,7 +181,10 @@ Top5 + QQQ floor 嘅 base portfolio 本身幾乎只係同 QQQ 打和：
 
 結論：闊 universe + momentum 並無穩定 alpha；好多靚數係 bias。
 
-### 3.4 無槓桿贏 CAGR 嘅唯一辦法：集中（concentration）
+### 3.4 無槓桿「集中版」—— 後來證實主要係 survivorship 幻覺（見 §3.5）
+
+> ⚠️ **2026-06 重大修正**：下面呢段聲稱「無槓桿集中版贏 QQQ CAGR」嘅證據，喺
+> 真 point-in-time（含退市股）數據下**證偽**。詳見 **§3.5**。以下保留作紀錄，但結論已被推翻。
 
 闊池 S&P 500（date-added，無槓桿，monthly，+QQQ floor）按 top_n 集中度：
 
@@ -233,11 +236,46 @@ _非重疊 3 年子區間（lb126 top10）— 4/6 贏：_
 
 → **「可重複」成立：對參數（9/9）同大部分時段（4/6）都贏 raw CAGR。** 但仍然係下面講嘅 risk-for-return，唔係免費 alpha。
 
-**但係（重要）**：
+**當時嘅 caveat（依然啱，但低估咗）**：
 
-1. **Sharpe 低過 QQQ**（0.88 vs 0.96）—— CAGR 贏係靠承受更大波動 / 更深回撤（-37.8% vs -35.1%）。**集中 = 無槓桿版嘅「多冒風險換回報」**，唔係風險調整 alpha。
-2. **Survivorship caveat**：497 隻係今日 S&P 500 成員（缺已退市），24.9% 偏高；但相對 beat（集中 > 指數）OOS + walk-forward 都企得住，只係幅度誇張。
-3. 結論：**想無槓桿贏 raw CAGR，數學上唯一路 = 集中（多冒風險），同槓桿一樣係 risk-for-return，只係換咗形式。冇免費 CAGR。**
+1. **Sharpe 低過 QQQ**（0.88 vs 0.96）—— 即使數字成立，CAGR 贏都係靠承受更大波動 / 更深回撤。
+2. **Survivorship caveat**：上面兩個 list 都係**今日** S&P 500 成員，缺晒歷史退市股 → 絕對 CAGR 偏高。當時以為「相對 beat 企得住」，**§3.5 證明連相對 beat 都企唔住**。
+
+### 3.5 Survivorship 修正：集中版 raw-CAGR edge 證偽（決定性）
+
+§3.4 唯一未做嘅驗證 = 用**真 point-in-time membership + 含退市股**嘅數據重跑。而家做咗：
+
+- `scripts/build_pit_sp500_membership.py`：由 Wikipedia 成份變動表（399 條 add/remove 紀錄）**向後重建** point-in-time membership → 826 隻歷史成員（今日 503 + **323 隻已被踢走/退市**），每隻有真實 start/end。
+- `scripts/fetch_pit_prices.py`：yfinance 抽埋退市股價格；關鍵兩步清洗 ——（a）**clip 落各自 membership 窗口**，剷走 yfinance *ticker-recycling* junk（退市後個 symbol 派咗畀第二隻證券，e.g. TIE 退市後變咗交易喺 8000+ 嘅嘢）；（b）scrub 殘留單日 >±50-60% 嘅壞 print。最後 **634 隻成員有價（含 ~181 隻退市股入返測試）**。
+- `scripts/pit_backtest_momentum_rotation.py`：survivorship-free engine（退市後 ffill 最後價當套現、跌幅照計）。
+
+**結果（2009-01 → 2026-06，無槓桿，monthly，15bps，+QQQ floor）：**
+
+| 配置（PIT，含退市股） | §3.4 舊數（survivorship） | **乾淨 CAGR** | Sharpe | 最大回撤   | vs QQQ |
+| --------------------- | ------------------------: | ------------: | -----: | ---------- | ------ |
+| top3                  |                     31.6% |     **18.9%** |   0.62 | **-70.2%** | ❌ 輸  |
+| top5                  |                     25.7% |     **20.0%** |   0.70 | -59.4%     | ❌ 輸  |
+| top10                 |                     23.9% |     **19.0%** |   0.76 | -36.4%     | ❌ 輸  |
+| 長揸 QQQ（同窗）      |                         — |     **21.0%** |   1.02 | -35.1%     | —      |
+
+**每個 top_n 而家 CAGR、Sharpe、回撤三項全輸 QQQ。** 穩健性（同樣全輸）：lb252 top10 = 19.2%、weekly top10 = 15.2%、top5 無 floor = 17.9%。（lb63 出 57%/波幅 4425% 係短 lookback 放大殘留數據噪音嘅 artifact，唔計。）
+
+**結論（推翻 §3.4）**：
+
+1. **「無槓桿闊池集中贏 QQQ」係 survivorship bias 砌出嚟。** 之前 24-31% CAGR 靠今日生存者組成嘅 universe；含返退市/被踢走股之後，集中度越高（top3）回撤越爆（-70%）但 raw CAGR 跌穿 QQQ。
+2. 殘留局限：仲有 192 隻退市股 Yahoo 完全摷唔到（混合破產 + 被溢價收購如 YHOO/ATVI/CELG），bias 方向兩面都有，但**最乾淨嘅版本已經令 edge 消失**。要再 confirm 絕對數字要 Norgate/CRSP。
+3. **對 goal 嘅誠實答案**：純無槓桿選股（即使係之前最強嘅集中版）**冇穩健跑贏 QQQ 嘅證據**。真正企得住嘅得返 §1-2 嗰種「QQQ floor 減回撤 + vol-target 動態曝險」，但 vol-target 本質係 ≤2x 動態槓桿，唔算純無槓桿。
+
+復現：
+
+```sh
+.venv/bin/python scripts/build_pit_sp500_membership.py
+.venv/bin/python scripts/fetch_pit_prices.py
+.venv/bin/python scripts/pit_backtest_momentum_rotation.py \
+  --prices output/sp500_pit_prices.csv --membership output/sp500_pit_membership.csv \
+  --benchmark QQQ --index-floor QQQ --lookback-days 126 --top-n 10 \
+  --rebalance monthly --cost-bps 15
+```
 
 ---
 

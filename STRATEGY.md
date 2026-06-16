@@ -149,9 +149,16 @@ uv run python scripts/backtest_momentum_rotation.py \
 
 ---
 
-## 9. 變體：無槓桿闊池集中版（raw CAGR 跑贏 QQQ）
+## 9. 變體：無槓桿闊池集中版 —— ⚠️ 已證偽（survivorship bias）
 
-上面個主策略（窄池 mega-cap × 1.15）靠 **槓桿 + 減回撤** 贏。如果**唔想用槓桿**，數學上唯一仲可以贏 **raw CAGR** 嘅辦法 = **集中**（concentration）。
+> ⚠️ **2026-06 重大修正**：呢個變體聲稱「無槓桿集中可以贏 raw CAGR」，但喺真
+> point-in-time（含退市股）數據下**證偽**。下面 §9.3 嘅靚數字（24-31% CAGR）係
+> survivorship bias —— universe 用今日生存者組成。含返退市/被踢走股之後，top3/5/10
+> **CAGR、Sharpe、回撤三項全輸 QQQ**（見 §9.5）。本變體**唔好實盤**；保留作紀錄。
+
+上面個主策略（窄池 mega-cap × 1.15）靠 **槓桿 + 減回撤** 贏。本變體當初嘅諗法：如果
+**唔想用槓桿**，數學上唯一仲可以贏 **raw CAGR** 嘅辦法 = **集中**（concentration）。
+—— 但呢個諗法建基於 survivorship-biased universe，§9.5 已推翻。
 
 ### 9.1 同主策略嘅分別
 
@@ -187,4 +194,22 @@ uv run python scripts/backtest_momentum_rotation.py \
 
 1. **Sharpe ≈ 或低過 QQQ（0.89–0.94 vs 0.96）**：CAGR 贏完全係**承受更深回撤**換返嚟，唔係 risk-adjusted alpha。集中 = 無槓桿版嘅「多冒風險換回報」，同槓桿本質一樣，只係換咗形式。**冇免費 CAGR。**
 2. **回撤隨集中度爆升**：top10 ≈ -37%（仲頂得順），top3 去到 **-52%**。揀 N 就係揀你頂唔頂得順幾深嘅坑。**top10 最划算**（贏 4.6pp、Sharpe 0.94 ≈ QQQ、回撤只深 ~2pp）。
-3. **Survivorship caveat（未解決）**：兩個 list 都係**今日**嘅 S&P 500 成員，缺咗歷史上已退市嘅。相對 beat（集中 > 指數）OOS + walk-forward 企得住，但**絕對 CAGR 偏高**。要 Norgate / CRSP 退市數據行 `pit_backtest_momentum_rotation.py` 先 confirm 剩幾多 —— **呢個係唯一未做嘅驗證**。
+3. **Survivorship caveat（已解決 → 證偽）**：之前話「相對 beat 企得住」係錯。已用
+   `build_pit_sp500_membership.py`（Wikipedia 變動表向後重建 PIT membership，含 323 隻
+   被踢走/退市股）+ `fetch_pit_prices.py`（含退市股價格、clip 走 ticker-recycling junk）
+   重跑乾淨數據，見 §9.5。
+
+### 9.5 Survivorship 修正結果（決定性，2009-01 → 2026-06，無槓桿，monthly，15bps，+QQQ floor）
+
+| 配置（含退市股 PIT） | §9.3 舊數 | 乾淨 CAGR | Sharpe | 最大回撤 | vs QQQ |
+| -------------------- | --------: | --------: | -----: | -------: | ------ |
+| top3                 |     31.6% | **18.9%** |   0.62 |   -70.2% | ❌ 輸  |
+| top5                 |     25.7% | **20.0%** |   0.70 |   -59.4% | ❌ 輸  |
+| top10                |     23.9% | **19.0%** |   0.76 |   -36.4% | ❌ 輸  |
+| 長揸 QQQ（同窗）     |         — | **21.0%** |   1.02 |   -35.1% | —      |
+
+穩健性（同樣全輸）：lb252 top10 19.2%、weekly 15.2%、無 floor top5 17.9%。
+
+**結論**：無槓桿純選股（即使最強嘅集中版）**冇穩健跑贏 QQQ 嘅證據**；之前嘅 edge 係
+survivorship 幻覺。要無槓桿大幅贏 raw CAGR 嘅「免費路」唔存在。真正企得住嘅得返主策略
+嗰種「QQQ floor 減回撤 + vol-target / 輕槓桿」，而 vol-target 本質係 ≤2x 動態槓桿。

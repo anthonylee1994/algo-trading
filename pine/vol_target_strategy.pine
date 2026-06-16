@@ -1,0 +1,68 @@
+//@version=5
+// 波動率目標策略（Vol-Target 26%）—— 單一標的版，建議掛喺 QQQ 日線。
+//
+// 核心：每日把曝險調到 目標波幅 / 實際波幅，封頂 maxLev。
+//   市場平靜 → 加曝險（可達槓桿）；波動飆升（跌市）→ 自動減倉。
+//   呢個就係 Moreira-Muir (2017) 嘅 volatility-managed portfolio。
+//
+// ⚠️ 必讀 —— 超額回報嚟自槓桿：
+// 呢個策略嘅平均曝險約 1.5x（平靜市加倉到 maxLev、波動市減倉）。佢嘅 outperformance
+// 主要係「vol-timed 槓桿」，唔係無中生有嘅 alpha。
+// - 無槓桿（曝險封頂 1x）之下，單一 QQQ + vol-target 喺牛市【跑輸】buy-and-hold
+//   （淨係波動時減倉，升市又上唔到 1x 以上）。
+// - 所以一定要容許槓桿，個 strategy 先贏到 buy-hold。下面 margin_long=50 = 容許做到 2x。
+//   TradingView 預設 margin 100%（唔俾槓桿）；唔設嘅話你會見到佢跑輸 buy-hold。
+//
+// 其他注意：
+// - 完整策略仲有「動量選股（top5 + QQQ 托底）」嗰部分，要幾十隻股橫截面，
+//   Pine 單一標的做唔到 —— 嗰part喺 Python engine 跑。呢度只係可移植嘅 vol-target 引擎。
+// - 無前視：orders 預設下一根開市先成交，波幅由到今根收市嘅數據計。
+// - 融資成本（曝險 > 1 嘅借入部分）Pine P&L 冇模擬；平均 1.5x、~3-5%/年之下約
+//   1.5-2%/年 drag，真實回報會明顯低於此回測。commission 只模擬咗交易成本。
+
+strategy("Vol-Target 26% (single asset, e.g. QQQ)",
+     overlay              = true,
+     pyramiding           = 1000,
+     initial_capital      = 100000,
+     default_qty_type     = strategy.percent_of_equity,
+     default_qty_value    = 100,
+     commission_type      = strategy.commission.percent,
+     commission_value     = 0.15,          // ≈ 15 bps 單邊（佣金 + 滑點）
+     margin_long          = 50,            // 50% 保證金 = 容許做到 2x；唔設就無槓桿、跑輸 buy-hold
+     calc_on_every_tick   = false,
+     process_orders_on_close = false)       // 下一根開市成交，無前視
+
+// ===== Inputs =====
+targetVol   = input.float(0.26, "目標年化波幅", step = 0.01,
+     tooltip = "曝險 = 目標波幅 / 實際波幅。0.26 = vol-target 26%。")
+volLen      = input.int(40, "波幅窗口（交易日）", minval = 5)
+maxLev      = input.float(2.0, "最大槓桿（曝險上限）", minval = 1.0, step = 0.1)
+rebalBand   = input.float(0.05, "再平衡閾值（曝險變動）", minval = 0.0, step = 0.01,
+     tooltip = "曝險變動超過呢個數先調倉，減少不必要交易。")
+annualize   = input.int(252, "年化因子（日線 = 252）")
+
+// ===== 波動率目標 =====
+ret        = close / close[1] - 1.0
+realizedVol = ta.stdev(ret, volLen) * math.sqrt(annualize)
+rawExpo    = realizedVol > 0.0 ? targetVol / realizedVol : 0.0
+targetExpo = math.min(rawExpo, maxLev)
+
+// 目標股數 = 曝險 × 權益 / 價格
+targetQty  = math.floor(targetExpo * strategy.equity / close)
+
+// 目前曝險（持倉市值 / 權益）
+curExpo    = strategy.equity > 0.0 ? strategy.position_size * close / strategy.equity : 0.0
+doRebal    = na(curExpo) or math.abs(targetExpo - curExpo) > rebalBand
+
+// 只做多：targetQty >= 0、position_size >= 0，delta < 0 只係減倉唔會反手做空。
+if doRebal
+    delta = targetQty - strategy.position_size
+    if delta > 0
+        strategy.order("VT add", strategy.long,  qty = delta)
+    else if delta < 0
+        strategy.order("VT trim", strategy.short, qty = -delta)
+
+// ===== 監測（只喺 data window 顯示，唔影響價格圖縮放）=====
+plot(targetExpo,  "目標曝險",     color = color.teal,   display = display.data_window)
+plot(realizedVol, "實際年化波幅", color = color.orange, display = display.data_window)
+plot(curExpo,     "目前曝險",     color = color.gray,   display = display.data_window)

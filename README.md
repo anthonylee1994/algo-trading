@@ -62,6 +62,35 @@ uv run python main.py --top-n 3
 - 需要買 / 賣嘅模擬交易計劃
 - 如啟用 `--vol-target`：raw target exposure、cap 後 target、現有策略 gross exposure、band 後 effective exposure，同今日係 `hold` 定 `rebalance`
 
+## Finviz Candidate Screener
+
+`finvizfinance` 只適合做**今日候選池**，唔好當歷史基本面 backtest。原因係 Finviz 係 current snapshot，直接攞嚟回測會有前視 / survivorship bias。
+
+預設 preset 對應呢條 Finviz screener，再用 Yahoo 126 日 momentum 排名：
+
+```text
+https://finviz.com/screener.ashx?v=161&f=cap_midover,fa_eps5years_o20,fa_roe_o15&ft=4&o=-marketcap
+```
+
+```sh
+uv run python scripts/finviz_momentum_candidates.py \
+  --preset eps-roe-mid \
+  --limit 80 \
+  --top-n 5 \
+  --aggressive-top-n 10 \
+  --lookback-days 126
+```
+
+可用 preset：
+
+- `eps-roe-mid`：市值 $2B 以上、EPS 5Y growth >20%、ROE >15%，按 market cap 由大到細攞候選。
+- `quality-growth`：大型 + 高流動性 + EPS/Sales growth + margin filter。
+- `liquid-large`：只限大型高流動性，filter 較鬆。
+- `mega`：mega-cap only。
+- `nasdaq100`：NASDAQ 100 內排名。
+
+呢個 script 會輸出今日 Top 5 / Top 10 momentum basket、QQQ floor 前嘅 base weights，同埋對應已回測策略參數。核心規則仍然係：**Finviz 產生今日候選；momentum 排名決定持倉；vol-target 決定總曝險。**
+
 ## Execute
 
 落 Futu 模擬盤 order（`TrdEnv.SIMULATE`）：

@@ -121,6 +121,34 @@ FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+
 
 **結論**：momentum 篩選喺廣泛大盤股冇加風險調整價值。「闊 universe = 真 alpha」假設**證偽**。
 
+### 3b. 跑贏「大盤」嘅選股策略：有，但本質係 mega-cap momentum / growth tilt
+
+如果 benchmark 由 QQQ 改做大盤 `SPY`，純選股策略係搵到嘅。用 `scripts/research_stock_selection_strategies.py`，只用年度市值 Top 10（滯後 1 年）+ Yahoo 價格，monthly rebalance、15bps 成本、不用槓桿、不用 vol-target：
+
+| 策略 | CAGR | MaxDD | Sharpe | 年份贏 SPY | vs SPY | vs QQQ | 解讀 |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | --- |
+| **Momentum L126 top5** | **18.9%** | **-30.5%** | 0.94 | 69% | **+4.9pp** | -0.5pp | 目前最好純選股版 |
+| Momentum L126 top5 + SPY floor | 18.7% | -30.5% | 0.93 | 69% | +4.6pp | -0.7pp | 空位用 SPY 補，稍慢 |
+| Momentum L126 top3 + SPY floor | 18.7% | -30.6% | 0.85 | 63% | +4.6pp | -0.7pp | 更集中但 Sharpe 差啲 |
+| Momentum L126 top10 | 17.6% | -29.1% | **0.96** | 69% | +3.5pp | -1.8pp | 分散、Sharpe 最高 |
+| Equal weight lagged Top10 | 17.5% | -34.7% | 0.94 | 63% | +3.4pp | -2.0pp | 唔 ranking 都贏 SPY，size/growth tilt 好大 |
+| Low volatility top5 | 12.9-13.3% | -25.8% 至 -27.1% | 0.85-0.87 | 44-50% | 輸 SPY | 大輸 QQQ | 低波唔係增長年代 alpha |
+
+具體規則：
+
+1. 每年只用上一年已知嘅 S&P 500 市值 Top 10，避免同年 membership 前視。
+2. 每月計各股票 126 日 momentum。
+3. 只買正 momentum 入面最高 5 隻，等權。
+4. 如果正 momentum 唔夠 5 隻，純選股版保留現金；floor 版用 SPY 補空位。
+5. 信號延後一日成交，交易成本 15bps。
+
+結論要分開講：
+
+- **相對 SPY：有可用選股策略。** `Momentum L126 top5` 做到約 **18.9% CAGR / -30.5% DD**，比 SPY 約 **14.1% CAGR / -33.7% DD** 好。
+- **相對 QQQ：未算贏。** 同期 QQQ 約 **19.4% CAGR / -35.1% DD**；最好純選股只係慢 QQQ 約 0.5pp，但回撤細啲。
+- **真正 edge 好可能唔係神奇選股，而係 mega-cap growth / quality tilt。** Equal-weight lagged Top10 已經 17.5% CAGR，代表「長期持有最大市值贏家」本身已經解釋咗好多超額。
+- **純選股主線可以用 `Momentum L126 top5`；若目標係跑贏 QQQ，就要加上 QQQ floor / vol-target / leverage。**
+
 ### 3a. 板塊 / 主題 ETF 輪動 —— selection bias 嘅活教材
 
 | ETF 輪動（動量 top-N, monthly, 含成本）                                | CAGR       | Sharpe    | 備註                                 |
@@ -384,6 +412,8 @@ uv run python scripts/backtest_momentum_rotation.py \
 | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `scripts/backtest_momentum_rotation.py`     | 主回測：修前視（shift 1）、成本（--cost-bps）、monthly rebalance、`--top-n`、`--index-floor`、`--leverage`、`--universe-lag-years`、`--sweep-lookback` |
 | `scripts/sweep_vol_target_momentum.py`      | 掃 `lookback/top_n/vol-target/window/cap`，搵大幅跑贏 QQQ 但回撤不差過 QQQ 嘅候選                                                                             |
+| `scripts/finviz_momentum_candidates.py`     | 用 `finvizfinance` 跑 `cap_midover,fa_eps5years_o20,fa_roe_o15`，按市值由大到細攞今日候選，再用 126D momentum 排 Top5/Top10；只係 forward screener，唔當歷史 alpha 證據 |
+| `scripts/research_stock_selection_strategies.py` | 純選股研究：lagged Top10 universe 入面比較 momentum / risk-adjusted momentum / low-vol 選股，對 SPY 同 QQQ 做 benchmark                                  |
 | `scripts/research_vol_target_secret.py`     | 拆解固定槓桿 vs vol-target，輸出平均/低波/高波曝險、融資 drag、調倉成本                                                                                      |
 | `scripts/research_leveraged_etf_vol_target.py` | 測 QQQ/QLD/TQQQ buy-hold 同 vol-target，確認「大幅跑贏」其實係更深回撤換回報                                                                             |
 | `scripts/attribute_vol_target_regime.py`    | 拆解 vol-target 策略喺低波/高波/逐年嘅 return attribution，確認「住半山」贏喺邊、輸喺邊                                                                      |

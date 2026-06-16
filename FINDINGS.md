@@ -48,6 +48,33 @@
 
 **共通原因**：任何擇時/形態都會喺某啲時候減倉；喺強趨勢牛市，每次踏空 = 直接蝕回報。
 
+### 2a. 高勝率均值回歸指標（TDX 通達信公式）
+
+一段「布林 %B + RSI + 成交量 + 橫行濾網 + RSI 背馳 + 冷卻」嘅買賣箭咀指標。Port 落 Python、補出場、計 15bps：
+
+| QQQ 日線（2007-2026） | CAGR | Sharpe | 最大回撤 |
+| --- | --- | --- | --- |
+| Long-only（買→賣） | 7.1% | 0.47 | -47% |
+| Long/Short | **-3.0%** | -0.03 | -59% |
+| 買入持有 QQQ | 16.7% | 0.81 | -53% |
+
+逐筆交易：**勝率 84%、平均每筆 +4.6%**，睇落係印鈔機 —— 但 19 年總和 +173% vs QQQ +1609%。死因：(1) 橫行濾網令大部分時間揸現金、踏空大牛；(2) 負偏態，一次 -30.6% 食返 6 次贏。
+1 小時日內測試（2024-26）結論一樣：long-only 5%、long/short -11%，全輸 buy-hold 25%。
+**教訓：高勝率 ≠ 賺錢 ≠ 跑贏 buy-hold。高勝率正正係令人 all-in 嘅心理陷阱。**
+
+### 2b. ICT Fair Value Gap（FVG）日內 event study
+
+FVG 係 ICT 最可機械化嘅概念（3 根 K imbalance）。QQQ 1h（2 年）+ 15m（2 個月），直接睇 FVG 之後嘅 forward return：
+
+| FVG 後 h 根（1h） | Bullish 均值 | Bearish 均值 | 無條件均值 |
+| --- | --- | --- | --- |
+| 1 | -0.026% | -0.000% | +0.014% |
+| 5 | +0.015% | +0.065% | +0.070% |
+| 10 | +0.167% | +0.188% | +0.138% |
+
+**Bullish FVG 後回報唔升反而略低過基準；Bearish FVG 後仲係正數。勝率 50-60% = 市場自然 base rate。** 即係 FVG 方向 = 噪音，冇預測力。可交易版：continuation long-only 3%、long/short -17%，全輸 buy-hold。
+**Scope**：呢個係 FVG **孤立**測試。正宗 ICT 要 HTF bias + liquidity + structure + kill zone confluence，嗰套係自由心證、不可證偽。證到嘅係「**FVG 單獨冇 edge**」。
+
 ---
 
 ## 3. Universe / 選股 —— 闊池都贏唔到

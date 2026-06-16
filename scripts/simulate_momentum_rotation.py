@@ -117,7 +117,6 @@ def main() -> None:
     trade_symbols = list(strategy_symbols)
     if args.index_floor and args.index_floor not in trade_symbols:
         trade_symbols.append(args.index_floor)
-    candidate_codes = [futu_us_code(symbol) for symbol in candidate_symbols]
     trade_codes = [futu_us_code(symbol) for symbol in trade_symbols]
     histories_by_code = get_price_history(
         host=args.futu_host,
@@ -126,8 +125,7 @@ def main() -> None:
         max_count=args.lookback_days + 2,
     )
     histories_all = {
-        code.removeprefix("US."): history
-        for code, history in histories_by_code.items()
+        code.removeprefix("US."): history for code, history in histories_by_code.items()
     }
     # 動量只睇 candidate（index-floor 唔計動量）。
     histories = {
@@ -273,7 +271,9 @@ def base_portfolio_weights(
     weights: dict[str, float] = {}
     if index_floor and top_n:
         for target in targets:
-            weights[str(target.ticker)] = weights.get(str(target.ticker), 0.0) + 1.0 / top_n
+            weights[str(target.ticker)] = (
+                weights.get(str(target.ticker), 0.0) + 1.0 / top_n
+            )
         empty = max(top_n - len(targets), 0)
         if empty > 0:
             weights[index_floor] = weights.get(index_floor, 0.0) + empty / top_n

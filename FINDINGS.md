@@ -304,6 +304,34 @@ Top5+QQQ VT30 cap2 大贏年份：
 
 解讀：而家唔係低波滿 2x，也唔係高波縮到 1x；係約 1.4x 山腰位。
 
+### 5.4 Walk-forward 驗證：vol-target 唔係 Sharpe alpha（重要修正）
+
+對 base（top5+QQQ floor）做 vol-target 參數驗證（36 組 grid：target_vol × window × cap）：
+
+**[A] 參數穩定性（full-sample）**
+
+- vol-target Sharpe 範圍 **0.87–0.97**（中位 0.93）vs **QQQ 0.96**。
+- **只有 7/36 組 Sharpe ≥ QQQ。** CAGR 17–28%（由 leverage/cap 拉開）。
+- → vol-target Sharpe **≈ QQQ（打和）**；CAGR 越高純粹係越大槓桿，唔係 risk-adjusted edge。
+
+**[B] Walk-forward（3y train→1y OOS，揀 train Sharpe 最佳參數）**
+
+| | CAGR | Sharpe | 最大回撤 |
+| --- | --- | --- | --- |
+| WF 自適應（揀參數） | 17.1% | **0.82** | -30.5% |
+| 固定 26%/40/2 | 24.3% | 0.94 | -30.1% |
+| base 未槓桿 | 19.8% | 0.93 | -30.6% |
+| 長揸 QQQ | 20.4% | **1.00** | -35.1% |
+
+→ **自適應揀 vol-target 參數會 overfit**：OOS Sharpe 0.82，仲衰過 base、衰過固定、更衰過 QQQ；每段揀中嘅參數跳嚟跳去，冇穩定贏家。
+
+**修正後嘅誠實結論：**
+
+1. vol-target + 槓桿**唔係 Sharpe-beating alpha** —— full-sample 同 walk-forward 都顯示 Sharpe ≈ QQQ。CAGR 嘅「贏」係 **leverage（多冒風險）**，唔係 alpha。
+2. **唔好 tune vol-target 參數**（walk-forward 證咗 adaptive 會 overfit）。要用就**固定一個合理值**，唔好優化。
+3. **真正 robust 嘅得一樣：回撤** —— 36 組都穩定 ~-30%（< QQQ -35%）。vol-target 可靠嘅好處 = **減回撤，唔係加 Sharpe**。
+4. 落注理由應該係「想要 QQQ 級回報但跌市痛少啲，並接受用槓桿放大 = 放大風險」，**唔係**「我搵到 alpha」。
+
 ---
 
 ## 6. 方法論紀律

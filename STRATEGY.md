@@ -145,6 +145,7 @@ uv run python scripts/backtest_momentum_rotation.py \
 4. **仲係 backtest**：真錢未行過。實盤要細注先跑一排，確認成交、滑點、融資利率同假設夾到。
 5. **融資利率風險**：3% 係估算；高息環境（2023+）retail margin 可達 5-6%。×1.15 之下影響細（5% 只蝕 ~0.3pp），但槓桿越高越敏感。
 6. **數據局限**：S&P 500 Top 10 市值名單來自年度快照；真正再嚴謹要季度 point-in-time 數據（Norgate/CRSP）。
+7. **唔係 Sharpe alpha，係 leverage + 減回撤（walk-forward 驗證）**：對 vol-target 版做過 36 組參數 grid + walk-forward。結論：Sharpe ≈ QQQ（0.87–0.97 vs 0.96，只 7/36 組贏），CAGR 嘅「贏」係 **leverage（多冒風險）**，唔係 risk-adjusted alpha；唯一 robust 嘅好處係**回撤細啲**（~-30% vs -35%）。而且**自適應揀 vol-target 參數會 overfit**（OOS Sharpe 跌到 0.82），所以**固定參數、唔好優化**。落注理由應該係「想要 QQQ 級回報但跌少啲、並接受槓桿放大風險」，唔係「搵到 alpha」。
 
 ```
 

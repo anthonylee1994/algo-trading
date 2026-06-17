@@ -8,7 +8,8 @@
 
 ## TL;DR
 
-**無槓桿嘅純選股，穩健跑贏 QQQ 好難；大幅跑贏 QQQ 要靠動態曝險 / 槓桿。**
+**無槓桿大幅 raw CAGR 跑贏 QQQ —— 試勻 6 個方向都證唔到。大幅 raw CAGR 贏必須輕槓桿（§1-2）。**
+**無槓桿 risk-adjusted 贏有兩條 robust 路：QQQ/Gold ~80/20 月度再平衡（§9.2）、QQQ + 5% OTM 月度 covered call（§10.2）。**
 
 最可落地嘅主策略：
 
@@ -468,6 +469,9 @@ Top5+QQQ VT30 cap2 大贏年份：
 | `pine/vol_target_strategy.pine`                  | TradingView 單標的 vol-target strategy                                  |
 | `scripts/multi_asset_no_leverage.py`             | 無槓桿跨資產配置 vs QQQ（rotation/risk-parity/blend/VT-cap1x）           |
 | `scripts/multi_asset_robustness.py`              | QQQ/GLD blend sweep + 子時段 + blend+VT robustness                       |
+| `scripts/research_tsmom_no_leverage.py`          | time-series momentum per-stock trend（broad PIT / mega，cash/floor mode） |
+| `scripts/research_option_income.py`              | option income：CBOE 真實 PUT/BXM index + QQQ BS covered call/put-write model（haircut / sigma-mode / weekly） |
+| `scripts/research_basket_options.py`             | 高-IV mega-cap basket covered call / put-write（lagged realized vol 做 IV proxy） |
 
 ---
 
@@ -553,8 +557,141 @@ Calmar 全輸。
 
 ---
 
+## 10. 新一輪：未試過嘅 alpha class（TSMOM / option income / calendar / multi-factor）
+
+> §1-9 用咗 4 個方向（mega-cap 選股、闊池 PIT 選股、因子 ETF、跨資產配置）證明無槓桿 raw CAGR 贏唔到 QQQ。
+> 本節專攻**之前完全未掂過嘅 alpha class**：per-stock trend following、option income（VRP）、
+> calendar effect、price-derived multi-factor。目標：搵到一條「大幅跑贏」嘅新路，或者徹底關門。
+
+工具：`scripts/research_tsmom_no_leverage.py`、`scripts/research_option_income.py`、
+`scripts/research_basket_options.py`（已加落 §7 工具表）。全部信號 `shift(1)`、含成本、PIT 數據。
+
+### 10.1 Time-series momentum（per-stock trend）—— 唔贏 raw CAGR
+
+之前所有 momentum 都係 **cross-sectional**（揀最強 top N）。TSMOM 係 **time-series**：每隻股票獨立判斷
+自己趨勢（升緊先揸、跌穿轉 cash/QQQ），文獻（Moskowitz/Ooi/Pedersen 2012）support 有 persistent premium。
+long-only 版保留 upside、靠 cut losses 控制 drawdown。
+
+| 配置（2010-2026，15bps） | CAGR | Sharpe | 最大回撤 | vs QQQ |
+| ------------------------ | ---: | -----: | -------: | ------ |
+| mega TSMOM + QQQ floor（最好） | 16.7% | 0.91 | -26.8% | ❌ 輸 2.7pp，但 DD 贏 |
+| mega tsmom floor weekly       | 15.1% | 0.84 | -31.0% | ❌ 輸 |
+| broad PIT cash-mode max50     | 10.4% | 0.62 | -41.7% | ❌ 大輸（dilute mega-cap） |
+| broad PIT + QQQ floor         | 10.7% | 0.71 | -37.1% | ❌ 大輸 |
+| mega cash-mode max10          |  9.5% | 0.78 | -25.0% | ❌ 大輸（cash drag 69% 曝險） |
+
+**結論**：TSMOM 全部輸 raw CAGR（最好 16.7% vs QQQ 19.4%）。機制同 §3.5 一致：broad TSMOM 稀釋咗
+cap-weighted QQQ 嘅 mega-cap 集中度（upside）；mega TSMOM 用 equal-weight 10 隻都稀釋咗 QQQ 重磅強勢股。
+最好嘅 mega combo（TSMOM+MA200 filter）Sharpe 0.91 ≈ QQQ、DD -26.8% < -35.1% —— **又係 risk-adjusted only，
+唔加 raw CAGR**。TSMOM 唔係新 alpha。
+
+### 10.2 Option income（VRP harvesting）—— 最接近 raw CAGR 贏嘅新路（但薄）
+
+唯一完全未試過嘅 alpha class：**賣 option 收 premium**（covered call / put-write，無借貸）。
+兩層證據：CBOE 真實 strategy index（無 modeling 假設）+ 自己 BS model（QQQ + VXN）。
+
+**[A] CBOE 真實 index（2007-2026，daily）—— option selling raw CAGR 長期輸 buy-hold：**
+
+| 策略 | CAGR | Sharpe | 最大回撤 |
+| ---- | ---: | -----: | -------: |
+| QQQ（買揸） | 16.2% | 0.79 | -53.4% |
+| S&P 500（買揸） | 8.6% | 0.52 | -56.8% |
+| **PUT 指數**（賣 ATM put，S&P） | 6.9% | 0.47 | -37.1% |
+| **BXM 指數**（covered call，S&P） | 5.7% | 0.45 | -40.1% |
+
+→ 真實 ATM option selling（PUT/BXM）**raw CAGR 輸 buy-hold**（5.7-6.9% vs 8.6%），只係 DD 細。
+**ATM covered call / put-write 唔係 raw-CAGR alpha**（global + 多年期 confirm）。
+
+**[B] QQQ option-income model（BS + VXN IV，actual QQQ 月度 payoff）—— 5% OTM covered call 係例外：**
+
+| 配置（2010-2026，monthly） | CAGR | Sharpe | 最大回撤 | vs QQQ 19.9% |
+| -------------------------- | ---: | -----: | -------: | ------------ |
+| QQQ covered call K=105%（haircut 1.0） | **20.7%** | **1.50** | **-25.7%** | ✅ 雙贏 +0.8pp |
+| QQQ covered call K=105%（haircut 0.9） | 19.5% | 1.42 | -27.0% | ⚠️ 邊緣輸 raw、大贏 risk-adjusted |
+| QQQ covered call K=105%（haircut 0.85） | ~18.9% | ~1.35 | ~-28% | ❌ 邊緣輸 raw、大贏 risk-adjusted |
+| QQQ put-write K=105%（haircut 1.0） | 20.6% | 1.50 | -25.8% | ✅ 雙贏（≈ CC） |
+| ATM（K=100%）haircut 1.0 | 13.6% | 1.76 | -19.1% | ❌ 輸 raw（cap 晒 upside） |
+| weekly / sigma-mode / mega basket | 10-17% | — | — | ❌ 全部更差 |
+
+**為乜 5% OTM 例外**：ATM（BXM）cap 晒 upside → melt-up 大輸。**5% OTM 保留每月 5% upside**——
+2010-2026 大部分月份 QQQ 月度回報 < 5%，所以保留 full upside + 收 premium；只有 melt-up month（>5%）被 cap。
+QQQ 高 IV（22%）→ OTM call premium 仍可觀。Sweet spot = K=105%。
+
+**[C] Premium robustness —— raw-CAGR edge 極薄、極依賴收到 full theoretical premium：**
+
+| haircut（BS premium 打折） | 2010-2026 CAGR | 2007-2026 CAGR |
+| -------------------------- | -------------: | -------------: |
+| 1.0（理想） | 20.7% ✅ | 18.9% ✅ |
+| 0.9 | 19.5% ❌ | 17.6% ✅ |
+| 0.85 | 18.9% ❌ | **16.9% ✅** |
+| 0.8 | 18.2% ❌ | 16.2% ❌（邊緣） |
+
+- **2010-2026**：10% haircut（0.9）已消除 raw-CAGR edge。現實 OTM call IV < ATM VXN（equity index call skew）
+  + bid-ask → 實際 haircut ~0.85-0.9 → **大概率 raw CAGR 打和 / 邊緣輸，但 Sharpe ~1.35、DD ~-28% 大幅 risk-adjusted 贏**。
+- **2007-2026（含 GFC）更 robust**：haircut 0.85 仍雙贏 QQQ 16.5%（+0.4pp raw + 大幅 risk-adjusted）。
+  機制：GFC 時 premium cushion + 無 melt-up 可 cap → 相對優勢更大；QQQ -49.7% DD vs CC -34.1%。
+
+**[D] Option income 誠實總結**：
+1. **真實 ATM option selling（CBOE BXM/PUT）長期 raw CAGR 輸 buy-hold**（global confirm，唔係 QQQ-specific artifact）。
+2. **5% OTM covered call on 高-IV QQQ** 係唯一例外——理想 premium（haircut 1.0）下 2010-2026 雙贏 +0.8pp、
+   2007-2026 +2.4pp；但 **raw-CAGR edge 對 premium realization 極敏感**，2010-2026 要 haircut ≥0.93 先贏。
+3. **robust 嘅部分**：option income **大幅贏 risk-adjusted**（Sharpe 1.3-1.5 vs 1.1、DD -26~-28% vs -33%），
+   喺所有 haircut（甚至 0.6）都成立。呢個係同 QQQ/GLD blend（§9.2）並列嘅**第二條無槓桿 risk-adjusted 路**。
+4. weekly / put-write / sigma-mode / 高-IV basket 全部更差（weekly capping 過頻、put-write cap 晒 upside、
+   basket base 弱、sigma-mode 賣太 OTM）。
+
+### 10.3 Calendar effect（Sell in May）—— QQQ 上完全反轉
+
+「Sell in May and go away」（Nov-Apr 揸股、May-Oct 揸 cash）係經典 S&P anomaly。但：
+
+| 配置（2010-2026） | CAGR | Sharpe | 最大回撤 |
+| ---------------- | ---: | -----: | -------: |
+| QQQ buy-hold | 19.3% | 0.96 | -35.1% |
+| Sell-in-May（Nov-Apr QQQ，rest cash） | 8.6% | 0.61 | -28.6% |
+| Sell-in-May + TLT off-season | 10.1% | 0.61 | -41.7% |
+
+**QQQ Nov-Apr annualized 18.9% vs May-Oct 20.6%**——off-season 反而更強！因為 modern tech bull market
+（2020 summer melt-up 等）喺 May-Oct 都強。Calendar effect 喺 QQQ **完全唔 work**。Gold momentum overlay
+（QQQ + 0/20 GLD）= 18.5%/1.01/-31.4%，又係 risk-adjusted only。
+
+### 10.4 Multi-factor（momentum × low-vol，price-derived）—— 輸
+
+PIT 闊池，composite score = 0.6 × momentum rank + 0.4 × (1 − vol rank)，top10 + QQQ floor：
+
+| 配置 | CAGR | Sharpe | 最大回撤 |
+| ---- | ---: | -----: | -------: |
+| composite mom+lowvol top10 | 8.1% | 0.58 | -36.0% |
+| QQQ | 19.4% | 0.96 | -35.1% |
+
+低-vol tilt 拉低回報（low-vol stocks 喺 mega-cap tech 牛市跑輸）。price-derived multi-factor 收斂返 momentum，
+已被 §3.5 證偽。**blend（QQQ/GLD）+ covered call** 組合 raw CAGR 更低（blend 本身已輸 QQQ，CC 再 cap upside）→ 10-16%。
+
+### 10.5 本輪總結：第六個方法 confirm，option income 係新嘅 risk-adjusted 路
+
+| 本輪試嘅 alpha class | raw CAGR vs QQQ | risk-adjusted vs QQQ |
+| -------------------- | :-------------: | :------------------: |
+| TSMOM per-stock trend（§10.1） | ❌ 輸（最好 16.7%） | ⚠️ 接近（DD 贏） |
+| Option income ATM（真實 BXM/PUT，§10.2[A]） | ❌ 輸（5.7-6.9% vs 8.6% S&P） | ✅ DD 贏 |
+| **Option income 5% OTM CC on QQQ（§10.2[B]）** | **⚠️ 邊緣**（h1.0 +0.8pp，h0.85 邊緣輸） | **✅ 大幅贏**（Sharpe 1.5、DD -26%） |
+| Calendar / Sell in May（§10.3） | ❌ 反轉（8.6%） | ❌ |
+| Multi-factor mom+lowvol（§10.4） | ❌ 輸（8.1%） | ❌ |
+
+**新增嘅 robust 無槓桿 risk-adjusted 路：QQQ + monthly 5% OTM covered call**（同 §9.2 QQQ/GLD blend 並列）：
+- raw CAGR 喺理想 premium 下邊緣贏（2010-2026 +0.8pp）、現實 premium 下打和；
+- risk-adjusted 喺所有 haircut 下大幅贏（Sharpe +0.3、DD -7pp、Calmar 明顯高）；
+- 2007-2026（含 GFC）更 robust，haircut 0.85 都雙贏。
+
+但**「大幅跑贏 raw CAGR」呢條 bar 仍然跨唔過**——option income 嘅 raw edge 薄到 10% premium haircut 就消失。
+連同 §3.1-3.2、§3.5、§4.4、§9.1，**已經用咗 6 個獨立方法**（mega-cap 選股、闊池 PIT 選股、TSMOM、
+因子 ETF、跨資產、option income）confirm：純無槓桿大幅跑贏 QQQ raw CAGR 喺 2010-2026 基本唔存在。
+
+---
+
 ## 最終一句
 
-**跑贏 QQQ 有兩條誠實嘅路。** (1) 想要 **raw CAGR 贏** → 冇免費午餐，要靠輕槓桿 + 減回撤嘅 base（§1-2，~1.15×）。
-(2) 想要 **無槓桿 risk-adjusted 贏**（Sharpe / Calmar / 更細回撤）→ **QQQ/Gold ~80/20 月度再平衡**（§9.2），
-robust、乾淨、唔使選股，CAGR 只犧牲 1-3pp 換更平滑嘅 equity curve。純無槓桿 raw CAGR 贏 QQQ —— 試勻四個方向都證唔到。
+**跑贏 QQQ 有三條誠實嘅路。**
+1. **大幅 raw CAGR 贏** → 冇免費午餐，**必須輕槓桿**（§1-2，top5+QQQ ×1.15 = 21.7%）。6 個無槓桿方向都證唔到大幅 raw 贏。
+2. **無槓桿 risk-adjusted 贏（首選，乾淨）** → **QQQ/Gold ~80/20 月度再平衡**（§9.2），唔使選股、唔使 options，Sharpe/Calmar/DD 全贏，CAGR 只蝕 1-3pp。
+3. **無槓桿 risk-adjusted 贏（次選，要 options）** → **QQQ + monthly 5% OTM covered call**（§10.2），Sharpe 1.5、DD -26%，CAGR 喺理想 premium 下邊緣贏、現實下打和。同 QQQ/GLD blend 二選一，視乎你接唔接受賣 option 嘅執行複雜度。
+
+純無槓桿**大幅** raw CAGR 跑贏 QQQ —— 試勻 6 個方向都證唔到；唯一可靠嘅 raw-CAGR 槓桿仍係 §1-2。

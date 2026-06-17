@@ -466,6 +466,8 @@ Top5+QQQ VT30 cap2 大贏年份：
 | `scripts/simulate_momentum_rotation.py`          | Futu 模擬盤落單                                                         |
 | `algo_trading/market_cap_universe.py`            | 年度 / dated point-in-time universe helper                              |
 | `pine/vol_target_strategy.pine`                  | TradingView 單標的 vol-target strategy                                  |
+| `scripts/multi_asset_no_leverage.py`             | 無槓桿跨資產配置 vs QQQ（rotation/risk-parity/blend/VT-cap1x）           |
+| `scripts/multi_asset_robustness.py`              | QQQ/GLD blend sweep + 子時段 + blend+VT robustness                       |
 
 ---
 
@@ -478,6 +480,81 @@ Top5+QQQ VT30 cap2 大贏年份：
 
 ---
 
+## 9. 跨資產配置：無槓桿 risk-adjusted 嘅唯一出路（2026-06 新方向）
+
+> 之前所有研究都係「**美股選股** vs QQQ」。本節試唯一未探索過嘅維度：**multi-asset allocation**
+> （bonds / gold / commodities / intl / defensive sectors），用 ETF，數據乾淨、**無 survivorship bias**。
+> 理論支撐：分散化係唯一 free lunch；QQQ 2010-2026 咁強係因為佢就係嗰段時間嘅贏家 asset，
+> 加入低相關 asset 係 long-only 無槓桿下唯一可能提升 risk-adjusted return 嘅路。
+
+數據：14 隻 ETF（QQQ/SPY/IWM/EFA/EEM/VNQ/XLU/XLP/TLT/IEF/AGG/GLD/DBC/BIL），2009-10→2026-06，
+月度 rebalance、15bps、信號 shift(1)、總曝險 ≤100% **無借貸**。
+script：`scripts/multi_asset_no_leverage.py` + `scripts/multi_asset_robustness.py`。
+
+### 9.1 其他配置：CAGR 全輸，分散有價但追唔上 QQQ 回報
+
+| 配置                       |  CAGR | Sharpe | 最大回撤 | 判斷                              |
+| -------------------------- | ----: | -----: | -------: | --------------------------------- |
+| 跨資產動量 top3/top5       | 5-8%  | 0.5-0.8| -19~-26% | 慘敗：揀到 IWM/EEM/DBC 長期弱勢 + whipsaw |
+| Dual momentum (QQQ/TLT)    | 16.0% |  0.85  | -37.2%   | 跌市轉 TLT 反而 whipsaw，DD 更深   |
+| Risk parity (inv-vol)      |  5.7% |  0.80  | -18.5%   | 大量低回報 asset，CAGR 太低        |
+| 60/40 (SPY/TLT)            | 10.1% |  1.00  | -27.6%   | Sharpe 微贏，CAGR 輸 9pp           |
+| All-Weather 風格            |  7.0% |  0.90  | -23.6%   | 同上，CAGR 更低                    |
+| QQQ/TLT 50/50              | 11.5% |  1.02  | -34.5%   | Sharpe 微贏，CAGR 輸 8pp、Calmar 輸 |
+
+跨資產動量 rotation / risk parity / 60/40 / All-Weather **CAGR 全輸 QQQ（19.3%）**。
+分散確實降咗波幅同回撤，但回報被低增長 asset（bonds/commodities）拖死。Sharpe 偶爾微贏，
+Calmar 全輸。
+
+### 9.2 QQQ/Gold blend = 無槓桿 risk-adjusted 跑贏 QQQ 嘅 robust 答案
+
+| 配置            |  CAGR | Sharpe | 最大回撤 | Calmar |
+| --------------- | ----: | -----: | -------: | -----: |
+| QQQ 90 / GLD 10 | 18.4% |  1.00  |  -32.9%  |  0.56  |
+| QQQ 85 / GLD 15 | 17.9% |  1.02  |  -31.8%  |  0.56  |
+| **QQQ 80 / GLD 20** | **17.5%** | **1.03** | **-30.6%** | **0.57** |
+| QQQ 75 / GLD 25 | 17.0% |  1.05  |  -29.5%  |  0.58  |
+| QQQ 70 / GLD 30 | 16.5% |  1.06  |  -28.4%  |  0.58  |
+| 長揸 QQQ        | 19.3% |  0.96  |  -35.1%  |  0.55  |
+
+- **Sharpe 同 Calmar 隨 gold 比例穩定上升**（1.00→1.06、0.56→0.58），CAGR 線性下降 18.4→16.5%。
+  整個 blend surface 平滑傾斜 —— **唔靠單一參數，唔係 overfit**。
+- **80/20**：Sharpe 1.03 vs 0.96、Calmar 0.57 vs 0.55、DD -30.6% vs -35.1%、CAGR 17.5% vs 19.3%（**輸 1.8pp**）。
+- 加 TLT（QQQ 70/GLD20/TLT10 等）反而差（Calmar 跌到 0.50-0.52，因 TLT 2022 暴跌）→ **gold 係比長債更好嘅 QQQ 分散劑**。
+
+**子時段穩定性（決定性，QQQ 80/GLD 20 vs QQQ）：**
+
+| 時段      | 80/20 CAGR/Sharpe/Calmar | QQQ CAGR/Sharpe/Calmar | 判斷                       |
+| --------- | ------------------------ | ---------------------- | -------------------------- |
+| 2010-2017 | 14.6% / 1.08 / 1.24      | 17.6% / 1.06 / 1.09    | Sharpe 打和，Calmar + DD 贏 |
+| 2018-2026 | 20.0% / 1.02 / 0.65      | 20.6% / 0.90 / 0.59    | **Sharpe 明顯贏 + Calmar 贏** |
+
+→ **兩個獨立子時段 risk-adjusted 都企得住**，唔係靠單一年份。機制：gold 喺股市危機
+（2020 COVID、2022 加息熊市）低相關，降 drawdown；月度再平衡喺兩者間再平衡。CAGR 犧牲
+1-3pp 換更平滑 equity curve。
+
+### 9.3 QQQ/GLD blend + vol-target cap1x（純減曝險，唔借錢）
+
+| 配置               |  CAGR | Sharpe | 最大回撤 | Calmar |
+| ------------------ | ----: | -----: | -------: | -----: |
+| blend VT cap1x 15% | 14.2% |  1.00  |  -21.7%  |  0.65  |
+| blend VT cap1x 20% | 15.6% |  0.99  |  -27.0%  |  0.58  |
+
+進一步降 drawdown（-21.7%），但 CAGR 跌到 14-16%。cap1x 唔借錢，算無槓桿，但牛市少賺。
+
+### 9.4 對 goal 嘅誠實總結
+
+1. **raw CAGR 無槓桿贏 QQQ 經四個獨立方法確認基本不可能**：mega-cap 選股（§3.1-3.2）、
+   闊池選股（§3.5）、基本面因子 ETF（§4.4）、跨資產配置（§9.1）。QQQ 2010-2026 太強。
+2. **但 risk-adjusted（Sharpe/Calmar/Drawdown）可以靠 QQQ/Gold ~80/20 月度再平衡無槓桿贏，而且 robust**
+   （§9.2 子時段 + 平滑 surface 雙重確認）。呢個係之前所有「靠槓桿放大」策略嘅無槓桿替代：
+   唔使借錢、唔使選股、數據乾淨。
+3. 若硬要 raw CAGR 贏，唯一出路仍係 §1-2 嘅輕槓桿（top5+QQQ ×1.15）。無免費 raw CAGR。
+
+---
+
 ## 最終一句
 
-**跑贏 QQQ 無捷徑。** 無槓桿純選股唔夠；真正可落地嘅路係先建立一個回撤較細、行為接近 QQQ 嘅 base portfolio，再用 vol-target 喺低波 regime 放大曝險。想要更高 CAGR，就要誠實接受更高槓桿、更深回撤同更大心理成本。
+**跑贏 QQQ 有兩條誠實嘅路。** (1) 想要 **raw CAGR 贏** → 冇免費午餐，要靠輕槓桿 + 減回撤嘅 base（§1-2，~1.15×）。
+(2) 想要 **無槓桿 risk-adjusted 贏**（Sharpe / Calmar / 更細回撤）→ **QQQ/Gold ~80/20 月度再平衡**（§9.2），
+robust、乾淨、唔使選股，CAGR 只犧牲 1-3pp 換更平滑嘅 equity curve。純無槓桿 raw CAGR 贏 QQQ —— 試勻四個方向都證唔到。

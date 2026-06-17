@@ -469,6 +469,7 @@ Top5+QQQ VT30 cap2 大贏年份：
 | `pine/vol_target_strategy.pine`                  | TradingView 單標的 vol-target strategy                                  |
 | `scripts/multi_asset_no_leverage.py`             | 無槓桿跨資產配置 vs QQQ（rotation/risk-parity/blend/VT-cap1x）           |
 | `scripts/multi_asset_robustness.py`              | QQQ/GLD blend sweep + 子時段 + blend+VT robustness                       |
+| `scripts/research_sector_concentration.py`       | 9-sector momentum rotation [A] / SMH concentration [B] / BTC blend [C] / QQQ+SMH systematize [D]  |
 | `scripts/research_tsmom_no_leverage.py`          | time-series momentum per-stock trend（broad PIT / mega，cash/floor mode） |
 | `scripts/research_option_income.py`              | option income：CBOE 真實 PUT/BXM index + QQQ BS covered call/put-write model（haircut / sigma-mode / weekly） |
 | `scripts/research_basket_options.py`             | 高-IV mega-cap basket covered call / put-write（lagged realized vol 做 IV proxy） |
@@ -687,11 +688,170 @@ PIT 闊池，composite score = 0.6 × momentum rank + 0.4 × (1 − vol rank)，
 
 ---
 
+## 11. 新一輪：sector-tilt / asset-selection 維度 —— 終於搵到一條 robust 嘅無槓桿大幅 raw 路
+
+> 之前 6 個方法都係「用 QQQ 自己嘅成份」或「其他 asset class」嚟贏 QQQ。本節**正式咁 attack
+> 個 goal 字面要求**：「無槓桿大幅 raw 贏 QQQ 嘅策略」—— 即係接受可能係 sector concentration
+> 或 asset selection 嘅答案，但要求 (a) 可執行、(b) clean ETF / asset（無單股 survivorship）、
+> (c) bias honest label、(d) sub-period + cost + 替代品 robustness 全部通過。
+>
+> 工具：`scripts/research_sector_concentration.py`（含 [A] sector rotation、[B] concentration、
+> [C] crypto、[D] systematize SMH edge）。全部信號 shift 1、含成本、QQQ benchmark 一致。
+
+### 11.1 [A] Systematic sector momentum rotation（純 systematic、無 bias 版）—— 全部輸 QQQ
+
+> 呢個係對 goal 最嚴苛、最無 bias 嘅測試：universe 係 pre-defined 9 個 GICS sector SPDR
+> ETF（XLB/XLE/XLF/XLI/XLK/XLP/XLU/XLV/XLY，由 2010 年起齊全）+ QQQ benchmark。
+> 每月 cross-sectional momentum，揀 top-N，equal weight，shift-1 信號，15bps。
+> **完全冇揀 sector、冇 cherry-pick**：個 system 自動 rotate 到「嗰個月動量最高嘅 sector」。
+
+| 配置（monthly, 15bps, 2010-2026） | CAGR | Sharpe | MaxDD | vs QQQ 19.3% |
+| -------------------------------- | ---: | -----: | ----: | -----------: |
+| mom3m top1 |  9.2% | 0.52 | -32.5% | ❌ -10.1pp |
+| mom3m top3 | 13.2% | 0.80 | -31.4% | ❌ -6.1pp |
+| mom6m top1 | 11.4% | 0.62 | -31.2% | ❌ -7.9pp |
+| mom6m top3 | 11.6% | 0.73 | -29.1% | ❌ -7.7pp |
+| mom12m top1 | 10.2% | 0.56 | -31.2% | ❌ -9.1pp |
+| mom12m top3 | 11.1% | 0.70 | -31.4% | ❌ -8.2pp |
+| +QQQ floor 補位 | 全部同 no-floor 一致 | — | — | 唔 help（QQQ 同 sectors 高相關） |
+
+**結論：systematic sector momentum 全部輸 QQQ 6-10pp**。機制：sector momentum 喺 tech/semis 長期強勢時
+whipsaw 賣出佢轉去短暫強勢但長期弱勢嘅 sector（XLE/XLF），rebal cost + whipsaw 食晒 edge。
+**呢個係第 7 個獨立方法 confirm** systematic + 無 bias + 無槓桿下 raw-CAGR 贏唔到 QQQ。
+
+### 11.2 [B] Sector concentration tilt（hindsight）—— SMH 27% 大幅贏 QQQ +7.8pp
+
+> 同 [A] 對比：呢個係 hindsight version ——「知邊個 sector 係呢個十年贏家」然後 buy-and-hold。
+> 揀 semis 係後見之明，但係一個**可執行、clean ETF、無單股 bias** 嘅策略。
+
+| Asset（buy-hold, 2010-2026） | CAGR | Sharpe | MaxDD | vs QQQ |
+| ---------------------------- | ---: | -----: | ----: | -----: |
+| QQQ | 19.3% | 0.96 | -35.1% | — |
+| **SMH（VanEck semis）** | **27.0%** | **0.97** | -45.3% | **✅ +7.8pp** |
+| SOXX（iShares semis）| 25.6% | 0.90 | -45.8% | ✅ +6.3pp |
+| XLK（tech sector）| 19.9% | 0.94 | -33.6% | ⚠️ +0.7pp |
+| XLE（energy）|  7.3% | 0.40 | -71.3% | ❌ -11.9pp |
+| XLF（financials）| 11.6% | 0.61 | -42.9% | ❌ -7.7pp |
+
+**SMH 大幅 raw 贏 QQQ +7.8pp**、Sharpe 略贏（0.97 vs 0.96）。但 sub-period 揭露真相：
+
+| Sub-period | SMH CAGR | QQQ CAGR | 差距 | 機制 |
+| ---------- | -------: | -------: | ---: | ---- |
+| 2010-2014 | 15.1% | 18.7% | **-3.6pp** ❌ | semis 仍喺 post-2008 復蘇期，QQQ software/FAANG 領跑 |
+| 2015-2019 | 22.9% | 16.7% | +6.2pp ✅ | NVDA/AMD 開始主導，semis 結構性贏 |
+| 2020-2026 | 40.2% | 21.4% | **+18.7pp** ✅ | AI / datacom / CHIPS Act super-cycle 全面爆發 |
+
+**+7.8pp 嘅 full-period edge 全部嚟自 2020+**。2010-2014 SMH 反而輸 QQQ 3.6pp。所以 SMH 嘅
+「大幅贏」係 **regime-specific（押 AI/semis supercycle 持續）**，唔係 stable alpha。揀 semis 而
+非 XLE 係 2020 後先明朗嘅後見之明。
+
+### 11.3 [C] Crypto（BTC）blended with QQQ —— blended 反而輸，純 BTC 先大幅贏
+
+> BTC 2010-2026 standalone 52-59% CAGR 係最大 raw edge，但 DD -83%、非傳統 asset、早期不可投資。
+> 我哋試 blend 嚟 tame DD。
+
+| 配置（monthly rebal, 2013-09+） | CAGR | Sharpe | MaxDD |
+| ------------------------------ | ---: | -----: | ----: |
+| QQQ buy-hold | 19.4% | 0.92 | -35.1% |
+| BTC buy-hold | 52.6% | 0.97 | -83.0% |
+| QQQ 95 / BTC  5 | 18.5% | 0.93 | -33.6% |
+| QQQ 90 / BTC 10 | 17.6% | 0.93 | -32.0% |
+| QQQ 80 / BTC 20 | 15.7% | 0.93 | -28.7% |
+
+**反直覺但關鍵：blended BTC 反而輸 QQQ**（-1 至 -4pp）。機制：monthly rebalance 喺 BTC 暴升
+週期不斷賣出 BTC 鎖利轉去 QQQ，drag 食晒 BTC 嘅 compounding。只有 100% BTC buy-hold 先保留
+到 52% edge，但咁就係 pure BTC bet（-83% DD）+ 早期不可投資。
+
+→ **BTC 唔係「blend 後大幅贏」嘅答案**，係「100% BTC = 全押單一非傳統 asset」嘅答案。**完全唔適合**當主流
+raw-CAGR 提升器。
+
+### 11.4 [D] Systematize SMH edge — QQQ/SMH 50/50 blend 係最終答案
+
+> 既然 [A] 證 systematic 唔 work、[B] 證 pure SMH 有 hindsight bias、blend 又要喺 regime
+> 逆轉時有 QQQ 兜底，**最 honest 嘅 systematic solution = QQQ/SMH 靜態 blend**（over-weight
+> semis sector 喺 QQQ 之上 + QQQ 提供 diversification）。
+
+**[D1] Blend 50/50 月度再平衡 vs dual-mom 6m：**
+
+| 配置 | CAGR | Sharpe | MaxDD | Calmar | vs QQQ 19.3% |
+| ---- | ---: | -----: | ----: | -----: | -----------: |
+| QQQ/SMH 50/50 monthly rebal | **24.2%** | **1.03** | -40.2% | **0.60** | **✅ +4.9pp** |
+| dual-mom 6m (switch) | 25.5% | 1.00 | -40.3% | 0.63 | ✅ +6.2pp |
+| dual-mom 12m (switch) | 21.1% | 0.86 | -45.8% | 0.46 | ⚠️ +1.8pp |
+
+**[D2] Sub-period stability（決定性，Blend 50/50）：**
+
+| 區間 | Blend CAGR | QQQ CAGR | Blend Sharpe | QQQ Sharpe | 結果 |
+| ---- | ---------: | -------: | -----------: | ---------: | ---: |
+| 2010-2014 | 19.7% | 18.7% | 1.06 | 1.08 | ✅ +1.0pp |
+| 2015-2019 | 20.1% | 16.7% | 1.05 | 0.99 | ✅ +3.4pp |
+| 2020-2026 | 31.0% | 21.4% | 1.05 | 0.91 | ✅ +9.6pp |
+
+→ **3/3 全部 sub-period 贏 QQQ raw CAGR**（最 critical 嘅 robustness test）！QQQ half 喺
+SMH 弱（2010-14）時兜住，SMH half 喺 SMH 強（2020+）時放大量；任何 regime 都唔會 catastrophic
+輸 QQQ。**呢個係 [B] pure SMH 嘅 robustness upgrade 版**。
+
+**[D3] Robustness sweeps（5 個獨立壓力測試）：**
+
+| Test | 結果 |
+| ---- | ---: |
+| **SOXX 替代 SMH**（唔同 provider，相同 index）| Blend 23.6% / Dual-mom 25.7% — 同 SMH 一致 |
+| **Cost 5-50bps**（blend）| CAGR 24.3→24.2%（monthly rebalance 對 cost 極 robust） |
+| **Cost 5-50bps**（dual-mom）| CAGR 25.9→23.9%（switch 略敏感但 50bps 仍大幅贏） |
+| **Blend weight 10%-50%**（grid）| 平滑 surface 20.8→24.2%，唔係 single-weight overfit |
+| **Walk-forward 2010-17 train / 2018-26 OOS** | Train 揀 50% SMH，OOS CAGR 28.4% vs QQQ 20.6% = **+7.8pp OOS edge** |
+
+**[D4] SMH + MA200 trend filter（試過想 tame DD，唔 work）：**
+| 區間 | SMH+MA200 | SMH | QQQ | 評 |
+| ---- | --------: | --: | --: | -- |
+| 2010-2014 | 13.1% | 15.1% | 18.7% | filter 反而拖累（whipsaw）|
+| 2015-2019 | 16.1% | 22.9% | 16.7% | 蝕咗 SMH 弱期 |
+| 2020-2026 | 33.6% | 40.2% | 21.4% | DD -42% vs -45% 改善唔多 |
+
+→ 50/50 blend 已經足夠 tame DD，trend filter 係 noise。**唔好加 filter**。
+
+**[D5] 點解 50/50 blend 大幅贏 QQQ（機制）：**
+- QQQ 本身 ~20% semis exposure，50/50 blend 有效將 semis 提到 ~60% exposure。
+- QQQ 其餘 80% 提供 mega-cap diversification，喺 semis 弱期（2010-14）兜住 DD。
+- 月度 rebalance 喺 semis 強週期自然放大 exposure（high-vol 反而不需要 trim 太多），
+  喺 semis 弱週期縮 blend 嘅 effective leverage。
+- 結果：raw edge 主要嚟自 semis supercycle，risk-adjusted edge 嚟自 QQQ 嘅 DD 緩衝。
+
+### 11.5 §11 對 goal 嘅總結
+
+| 框架 | 結果 | 評 |
+| ---- | ---: | -- |
+| [A] Systematic sector rotation（純 systematic、無 bias）| 全部輸 QQQ 6-10pp | **第 7 個方法 confirm systematic 唔 work** |
+| [B] Pure SMH buy-hold（hindsight）| 27% vs QQQ 19.3%，+7.8pp | 大幅贏但全靠 2020+；2010-14 反而輸 |
+| [C] BTC blended | 全部 blended 輸 QQQ | rebal drag 食晒 edge；只有 100% BTC 贏但 -83% DD |
+| **[D] QQQ/SMH 50/50 blend** | **24.2% vs QQQ 19.3%，+4.9pp** | **🏆 robust 答案：3/3 sub-period 贏、SOXX 一致、cost robust、walk-forward OOS +7.8pp、Sharpe/Calmar 贏** |
+
+**§11 嘅新答案** = **QQQ/SMH 50/50 月度再平衡** 係**首個 systematic、clean、可重現、無槓桿、
+大幅 raw 贏 QQQ 嘅策略**。**4.9pp** raw CAGR 差距、Sharpe 1.03、Calmar 0.60、3/3 sub-period
+穩贏、walk-forward OOS +7.8pp。代價：MaxDD -40% vs -35%（深 5pp），同 edge 主要嚟自
+AI/semis supercycle 嘅 regime bet 假設。
+
+**honest caveats**（必須 label）：
+1. **揀 SMH 仍有 sector-selection bias**（systematic 9-sector rotation 證明「揀中」係關鍵）。
+2. **2010-2014 sub-period 50/50 blend 只贏 1.0pp**（QQQ half 兜住先唔輸），2015-19 贏 3.4pp，
+   2020+ 贏 9.6pp — 主流 edge 嚟自 AI/semis supercycle。
+3. **呢個同 §9.2（QQQ/GLD 80/20）+ §10.2（QQQ+CC）係唔同 regime bet**：
+   - §9.2/§10.2 押「QQQ 太集中、想 diversification」→ risk-adjusted 贏、CAGR 打和或邊緣贏。
+   - §11[D] 押「semis/AI 仲會贏」→ raw CAGR 真正大幅贏、但 drawdown 深啲、係 sector bet。
+4. SMH 個 -45% drawdown 喺 50/50 blend 舒緩到 -40%，但仍然深過 QQQ -35%，**心理成本要計**。
+
+---
+
 ## 最終一句
 
-**跑贏 QQQ 有三條誠實嘅路。**
-1. **大幅 raw CAGR 贏** → 冇免費午餐，**必須輕槓桿**（§1-2，top5+QQQ ×1.15 = 21.7%）。6 個無槓桿方向都證唔到大幅 raw 贏。
-2. **無槓桿 risk-adjusted 贏（首選，乾淨）** → **QQQ/Gold ~80/20 月度再平衡**（§9.2），唔使選股、唔使 options，Sharpe/Calmar/DD 全贏，CAGR 只蝕 1-3pp。
-3. **無槓桿 risk-adjusted 贏（次選，要 options）** → **QQQ + monthly 5% OTM covered call**（§10.2），Sharpe 1.5、DD -26%，CAGR 喺理想 premium 下邊緣贏、現實下打和。同 QQQ/GLD blend 二選一，視乎你接唔接受賣 option 嘅執行複雜度。
+**跑贏 QQQ 有四條誠實嘅路（2026-06 終版）**
+1. **無槓桿 risk-adjusted 贏（最穩陣，無 sector bet）** → **QQQ/Gold ~80/20 月度再平衡**（§9.2），唔使選股、唔使 options，Sharpe/Calmar/DD 全贏，CAGR 只蝕 1-3pp。
+2. **無槓桿 risk-adjusted 贏（次選，要 options）** → **QQQ + monthly 5% OTM covered call**（§10.2），Sharpe 1.5、DD -26%，CAGR 喺理想 premium 下邊緣贏、現實下打和。
+3. **無槓桿大幅 raw CAGR 贏（sector tilt，要押 AI/semis supercycle）** → **QQQ/SMH 50/50 月度再平衡**（§11[D]），24.2% vs 19.3%（+4.9pp），Sharpe 1.03，3/3 sub-period 贏，walk-forward OOS +7.8pp，**係 7 個 systematic 方法 confirm 唔到之後嘅新答案**。代價：MaxDD -40% vs -35%、edge 來自 2020+ semis regime。
+4. **大幅 raw CAGR 贏（最進取）** → 冇免費午餐、**必須輕槓桿**（§1-2，top5+QQQ ×1.15 = 21.7%）。6 個無槓桿 systematic 方向（+1 個 sector rotation）都證唔到 systematic 大幅 raw 贏。
 
-純無槓桿**大幅** raw CAGR 跑贏 QQQ —— 試勻 6 個方向都證唔到；唯一可靠嘅 raw-CAGR 槓桿仍係 §1-2。
+**對 goal 嘅最終誠實答案：純 systematic + 無 sector tilt，無槓桿大幅 raw 贏唔到 QQQ**（7 個方法
+confirm：mega-cap 選股、闊池 PIT 選股、TSMOM、因子 ETF、跨資產、option income、9-sector
+momentum rotation）。**接受 sector tilt 嘅 raw 贏存在 = QQQ/SMH 50/50 blend**（§11[D]），
+係當前可執行、可重現、bias-honest 嘅最佳「無槓桿大幅 raw 贏」答案。
+

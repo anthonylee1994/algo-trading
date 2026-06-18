@@ -473,6 +473,8 @@ Top5+QQQ VT30 cap2 大贏年份：
 | `scripts/research_tsmom_no_leverage.py`          | time-series momentum per-stock trend（broad PIT / mega，cash/floor mode） |
 | `scripts/research_option_income.py`              | option income：CBOE 真實 PUT/BXM index + QQQ BS covered call/put-write model（haircut / sigma-mode / weekly） |
 | `scripts/research_basket_options.py`             | 高-IV mega-cap basket covered call / put-write（lagged realized vol 做 IV proxy） |
+| `scripts/screen_forward_candidates.py`           | Finviz snapshot DB（../stock-screener）forward screener：基本面+技術雙硬篩 → 今日候選 + watchlist 技術健康分類 |
+| `scripts/research_individual_tilt_portfolio.py`  | 今日 screener 雙強籃子 tilt portfolio vs QQQ / 純 blend（近期 1-5Y，selection-bias-honest）|
 
 ---
 
@@ -939,4 +941,60 @@ momentum 補返 CC 嗰半 cap 走嘅 upside。
 對真正「**大幅跑贏 raw**」嘅定義嚟講，**§12[5] 係當前最優答案**（+7.5pp, Sharpe 1.15, MaxDD < QQQ），
 代價係執行上要 monthly options rolling + tax 影響。對「**接受 sector tilt 但想淨 ETF**」嘅人，**§11[D] 仍然係最佳
 systematic 答案**。
+
+---
+
+## §13. 2026-06 新一輪：用 SQLite forward screener + 個股 tilt portfolio 直接測試「個股挑選有冇附加 alpha」
+
+> 之前 §1-12 已用 7 個 systematic 方法 confirm 無槓桿大幅 raw 贏 = QQQ/SMH blend（§11[D]）/ QQQ-CC+SMH（§12）。
+> 本節用兩個**之前未掂過嘅數據源**再驗一層：`../stock-screener/data/db.sqlite`（Finviz **current snapshot**，1331 隻，
+> 含 pre-computed Fundamental/Technical/Total Score，**無歷史**）+ `../stock-notes`（high-conviction watchlist）。
+> 兩件事：(1) forward screener 產生今日候選 + cross-confirm 今日雙強 sector；(2) 將「進取版個股 tilt portfolio」
+> backtest 近期 1-5Y vs QQQ + **純 blend**，**直接量度「個股挑選相對純 sector blend 有幾多附加 alpha」**。
+>
+> 工具：`scripts/screen_forward_candidates.py`（screener）+ `scripts/research_individual_tilt_portfolio.py`（tilt backtest）。
+> DB scale 已驗證：ROE/EPS5Y/Sales5Y/Margin/D-E/Target-Upside = decimal（0.15=15%）；RSI=0..100；
+> ROC125 對部分小盤有離譜值 → 用 percentile rank 而非絕對 threshold。
+
+### 13.1 Forward screener —— 今日自己 confirm semis 雙強
+
+硬篩（**基本面**：MktCap≥15B, ROE≥18%, (EPS5Y≥15% OR Sales5Y≥18%), D/E<1.5, GM≥40%｜**技術**：ROC125≥60th pct, >EMA200, RSI 40-78）：
+
+- **19 隻「基本面+技術雙強」候選，15 隻半導體 / AI infra**（LRCX/MU/AMAT/KLAC/ASML/FTNT/CRDO/TSM/ANET/NXPI/NVDA/AVGO/...，加 GOOG/MRK/NVS）。
+- sector 分布：Technology 12 / Consumer Cyclical 2 / Comm 2 / Healthcare 2 / Materials 1。
+- **呢個同 §11 backtest 結論 cross-confirm**——完全獨立嘅基本面+技術規則，無 cherry-pick，自己撞埋 semis。即「今日市場用真金白銀定價緊嘅強勢」同「backtest 嘅 raw-CAGR 贏家」係同一個 sector，唔係 overfit 某個參數。
+- 筆記 watchlist 技術健康：**STRONG**（NVDA/AVGO/TSM/MU/GOOG/JPM/LLY/MRK…）；**WEAK / 跌穿 EMA200：MSFT/META/MA/IBM/COIN**（質素好但仍在調整，唔好加倉 —— 呼應筆記「高質股唔係任何價都買，要等估值跌到低位」）。MSFT 基本面 FSc 75 但 ROC125 −20%、RSI 35，正正係「質素好 + 弱勢」嘅儲備名單。
+
+### 13.2 個股 tilt vs 純 blend —— 揀個股幾乎冇附加 alpha（決定性）
+
+將今日 screener 雙強籃子（AVGO/NVDA/TSM/MU/LRCX/ASML/AMAT/KLAC/GOOG 等權）建構「進取版」：QQQ 50% + SMH 20% + basket 25% + cash 5%，月度再平衡 15bps，對比純 BLEND（QQQ/SMH 50/50）同純 QQQ：
+
+| 時段 | QQQ | BLEND 50/50 | TILT 50/20/25/5 | **TILT vs BLEND** |
+| ---- | --: | --: | --: | --: |
+| 1Y  | 38.2% | 72.7% | 74.0% | **+1.3pp** |
+| 2Y  | 23.3% | 39.2% | 40.1% | **+0.9pp** |
+| 3Y  | 26.7% | 42.9% | 43.1% | **+0.2pp** |
+| 5Y  | 16.7% | 26.8% | 27.1% | **+0.3pp** |
+
+> ⚠️ **Selection bias（必須 label）**：籃子係**今日**雙強股 backtest 過去 = upper bound（佢哋今日強正因過去升咗）。
+> 所以 +0.2~1.3pp 已經係**最樂觀**估計；真實 PIT 含退市股下只會更低。
+
+**結論（決定性）：**
+
+1. **個股 tilt 相對純 QQQ/SMH blend 只加 0.2-1.3pp**（仲要 biased upper bound）→ **揀個股冇附加 raw alpha**，完美印證 §3.5（PIT 含退市股下選股冇獨立 alpha）。raw edge **全部來自 sector tilt（semis supercycle）**，唔係個股挑選。
+2. **BLEND 已經食咗 ~90% 嘅 raw edge**（5Y +10.1pp vs QQQ）；TILT 只喺 BLEND 之上加 marginal 集中度。
+3. TILT 嘅 Sharpe 略好過 BLEND（5Y 1.04 vs 0.98，因 9 隻分散略降 vol），但 edge 太薄，**唔抵佢嘅執行複雜度**（9 隻個股研究 + 監控）+ 單股集中風險。
+4. **落地主策略不變 = 純 QQQ/SMH 50/50 blend**（§11[D]）。Forward screener + 個股 tilt 嘅價值係「regime cross-check + 心理上覺得自己揀股」，唔係數字上嘅 alpha。
+
+### 13.3 §13 對 goal 嘅淨貢獻
+
+| 問題 | 答案 |
+| ---- | ---- |
+| Forward screener confirm 邊個 sector？ | **semis / AI infra**（同 §11 一致，獨立 cross-confirm）|
+| 今日買咩候選？ | LIST 3 雙強 19 隻（`output/forward_candidates.csv` + script output）|
+| 個股挑選 beat 純 blend 嗎？ | **冇**（+0.2~1.3pp 且 biased；印證 §3.5）|
+| 落地主策略？ | **純 QQQ/SMH 50/50**；想 active 就用 screener 名單做 ≤25% tilt（接受邊際 + 押 semis）|
+
+**第 8 個獨立方法**（forward screener + tilt backtest）confirm：**個股挑選喺 sector blend 之上冇附加 raw alpha**。
+誠實落腳仍係 §11[D] 純 QQQ/SMH 50/50 blend。**Forward screener 嘅真正用途 = regime cross-check（今日 semis 仍雙強 → blend 仍成立）+ 產生候選名單做心理/分散，唔係 alpha engine。**
 

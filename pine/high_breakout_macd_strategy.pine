@@ -1,0 +1,44 @@
+//@version=6
+strategy("順勢交易",
+     overlay = true,
+     pyramiding = 0,
+     initial_capital = 100000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 100)
+
+breakoutLen = input.int(20, "新高日數", minval = 1)
+exitLen = input.int(10, "新低日數", minval = 1)
+fastLen = input.int(5, "MACD fast", minval = 1)
+slowLen = input.int(35, "MACD slow", minval = 1)
+signalLen = input.int(5, "MACD signal", minval = 1)
+maLen = input.int(200, "MA 日數", minval = 1)
+
+[macdLine, signalLine, histLine] = ta.macd(close, fastLen, slowLen, signalLen)
+
+highestHigh = ta.highest(high, breakoutLen)
+lowestLow = ta.lowest(low, exitLen)
+ma = ta.sma(close, maLen)
+
+isHighestHigh = high >= highestHigh
+isLowestLow = low <= lowestLow
+
+buySignal = high >= highestHigh and macdLine > 0 and close > ma
+sellSignal = low <= lowestLow
+
+if buySignal and strategy.position_size <= 0
+    strategy.entry("BUY", strategy.long)
+
+if sellSignal and strategy.position_size > 0
+    strategy.close("BUY")
+
+plot(highestHigh, "20日新高線", color = color.new(color.green, 0), linewidth = 2)
+plot(lowestLow, "10日新低線", color = color.new(color.red, 0), linewidth = 2)
+plot(ma, "200MA", color = color.new(color.blue, 0), linewidth = 2)
+plotshape(isHighestHigh, "H20", shape.labeldown, location.abovebar, color = color.green, text = "H20", textcolor = color.white, size = size.tiny)
+plotshape(isLowestLow, "L10", shape.labelup, location.belowbar, color = color.red, text = "L10", textcolor = color.white, size = size.tiny)
+// plotshape(buySignal and strategy.position_size <= 0, "買入訊號", shape.triangleup, location.belowbar, color = color.green, size = size.small)
+// plotshape(sellSignal and strategy.position_size > 0, "賣出訊號", shape.triangledown, location.abovebar, color = color.red, size = size.small)
+
+plot(macdLine, "MACD line", color = color.teal, display = display.data_window)
+plot(signalLine, "MACD signal", color = color.orange, display = display.data_window)
+plot(histLine, "MACD hist", color = color.gray, display = display.data_window)

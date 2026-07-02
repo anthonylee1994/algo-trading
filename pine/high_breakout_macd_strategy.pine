@@ -1,14 +1,17 @@
 //@version=6
-strategy("順勢交易_優化版",
+strategy("順勢交易",
      overlay = true,
      pyramiding = 0,
      initial_capital = 100000,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.05,
+     slippage = 2,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 100) // 實盤建議調低，例如 20-30%
 
 // --- 輸入參數 ---
 breakoutLen = input.int(20, "新高日數 (突破)", minval = 1)
-exitLen     = input.int(10, "新低日數 (出場)", minval = 1)
+exitLen     = input.int(40, "新低日數 (出場)", minval = 1) // backtest: 10日出場太急被震走, 40日回報翻倍 (QQQ 5.6%→13.2% CAGR)
 fastLen     = input.int(5,  "MACD 快線", minval = 1)
 slowLen     = input.int(35, "MACD 慢線", minval = 1)
 signalLen   = input.int(5,  "MACD 訊號線", minval = 1)
@@ -30,19 +33,23 @@ buySignal  = isHighestHigh and macdLine > 0 and close > ma
 sellSignal = isLowestLow
 
 // --- 交易執行 ---
-if buySignal and strategy.position_size <= 0
-    strategy.entry("BUY", strategy.long)
+// stop 單掛喺突破價: K 線一升穿即成交, 唔使等收市後下一支開市價追高
+if strategy.position_size == 0
+    if macdLine > 0 and close > ma
+        strategy.entry("BUY", strategy.long, stop = highestHigh + syminfo.mintick)
+    else
+        strategy.cancel("BUY") // 濾網唔再成立就撤單
 
-if sellSignal and strategy.position_size > 0
-    strategy.close("BUY")
+if strategy.position_size > 0
+    strategy.exit("EXIT", "BUY", stop = lowestLow) // 出場同樣用 stop 單 intrabar 執行
 
 // --- 繪圖可視化 ---
 plot(highestHigh, "20日新高線", color = color.new(color.green, 0), linewidth = 2)
-plot(lowestLow, "10日新低線", color = color.new(color.red, 0), linewidth = 2)
+plot(lowestLow, "出場新低線", color = color.new(color.red, 0), linewidth = 2)
 plot(ma, "200MA", color = color.new(color.blue, 0), linewidth = 2)
 
 plotshape(isHighestHigh, "H20", shape.labeldown, location.abovebar, color = color.green, text = "H20", textcolor = color.white, size = size.tiny)
-plotshape(isLowestLow, "L10", shape.labelup, location.belowbar, color = color.red, text = "L10", textcolor = color.white, size = size.tiny)
+plotshape(isLowestLow, "LO", shape.labelup, location.belowbar, color = color.red, text = "LO", textcolor = color.white, size = size.tiny)
 
 // MACD 數值僅顯示於 Data Window
 plot(macdLine, "MACD line", color = color.teal, display = display.data_window)

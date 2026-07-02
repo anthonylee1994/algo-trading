@@ -8,8 +8,6 @@ Sweep 維度:
 
 from __future__ import annotations
 
-import itertools
-
 import numpy as np
 import pandas as pd
 import yfinance as yf
@@ -45,7 +43,11 @@ def run(df: pd.DataFrame, use_macd: bool, use_ma: bool) -> dict:
     for i, r in enumerate(rows):
         if shares == 0:
             prev = rows[i - 1] if i > 0 else None
-            trend_ok = prev is not None and (not use_macd or prev.macd > 0) and (not use_ma or prev.Close > prev.ma200)
+            trend_ok = (
+                prev is not None
+                and (not use_macd or prev.macd > 0)
+                and (not use_ma or prev.Close > prev.ma200)
+            )
             if trend_ok and r.High > r.hh:
                 fill = max(r.hh, r.Open)
                 shares = cash / (fill * (1 + COMMISSION))
@@ -64,7 +66,6 @@ def run(df: pd.DataFrame, use_macd: bool, use_ma: bool) -> dict:
     cagr = (eq.iloc[-1] / eq.iloc[0]) ** (1 / years) - 1
     dd = (eq / eq.cummax() - 1).min()
     sharpe = ret.mean() / ret.std() * np.sqrt(252) if ret.std() > 0 else 0
-    exposure = (pd.Series([1 if c else 0 for c in (eq.diff() != 0)]).mean())
     tr = np.array(trades)
     return {
         "cagr": cagr,
@@ -100,9 +101,16 @@ def main() -> None:
         for b, e, macd, ma, label in combos:
             df = add_indicators(raw, b, e)
             r = run(df, macd, ma)
-            out.append({"variant": label, "CAGR": f"{r['cagr']:6.2%}", "Sharpe": f"{r['sharpe']:5.2f}",
-                        "MaxDD": f"{r['maxdd']:7.2%}", "Trades": r["trades"],
-                        "Win": f"{r['win']:5.1%}" if not np.isnan(r["win"]) else "-"})
+            out.append(
+                {
+                    "variant": label,
+                    "CAGR": f"{r['cagr']:6.2%}",
+                    "Sharpe": f"{r['sharpe']:5.2f}",
+                    "MaxDD": f"{r['maxdd']:7.2%}",
+                    "Trades": r["trades"],
+                    "Win": f"{r['win']:5.1%}" if not np.isnan(r["win"]) else "-",
+                }
+            )
         print(pd.DataFrame(out).set_index("variant").to_string())
 
 

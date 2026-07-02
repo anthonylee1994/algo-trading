@@ -10,7 +10,6 @@ strategy("順勢交易",
 // 2026-07 回測 tune (QQQ/SPY/SMH 2009-2026, train/test 分段驗證):
 //   15/20 + 淨MACD 係穩定 plateau (鄰近 8-15/15-25 表現接近)
 //   200MA 濾網會嚴重拖累回報 (churn 後重入太慢), 預設關閉
-//   Chandelier exit 4xATR(22) 三 ETF 全面改善 (3.75-4.5 係 plateau)
 breakoutLen = input.int(15, "新高日數 (突破)", minval = 1)
 exitLen     = input.int(20, "新低日數 (出場)", minval = 1)
 fastLen     = input.int(5,  "MACD 快線", minval = 1)
@@ -19,9 +18,6 @@ signalLen   = input.int(5,  "MACD 訊號線", minval = 1)
 maLen       = input.int(200,"MA 長期趨勢線", minval = 1)
 useMacd     = input.bool(true,  "用 MACD>0 濾網")
 useMa       = input.bool(false, "用 MA 趨勢濾網")
-useChand    = input.bool(true,  "用 Chandelier 出場")
-atrLen      = input.int(22, "ATR 長度", minval = 1)
-chandMult   = input.float(4.0, "Chandelier ATR 倍數", minval = 0.5, step = 0.25)
 
 // --- 指標計算 ---
 [macdLine, signalLine, histLine] = ta.macd(close, fastLen, slowLen, signalLen)
@@ -31,22 +27,12 @@ highestHigh = ta.highest(high, breakoutLen)[1]
 lowestLow   = ta.lowest(low, exitLen)[1]
 ma          = ta.sma(close, maLen)
 
-// --- Chandelier exit: 入場後最高收市 - N x ATR ---
-atrVal = ta.atr(atrLen)
-var float highClose = na
-if strategy.position_size > 0
-    highClose := na(highClose) ? close : math.max(highClose, close)
-else
-    highClose := na
-chandStop = highClose - chandMult * atrVal
-
 // --- 訊號判斷 ---
 isHighestHigh = high > highestHigh // 改為大於「過去」的最高點
 isLowestLow   = low < lowestLow   // 改為小於「過去」的最低點
-isChandExit   = useChand and strategy.position_size > 0 and close < chandStop
 
 buySignal  = isHighestHigh and (not useMacd or macdLine > 0) and (not useMa or close > ma)
-sellSignal = isLowestLow or isChandExit
+sellSignal = isLowestLow
 
 // --- 交易執行 ---
 if buySignal and strategy.position_size <= 0
@@ -59,7 +45,6 @@ if sellSignal and strategy.position_size > 0
 plot(highestHigh, "新高線 (突破)", color = color.new(color.green, 0), linewidth = 2)
 plot(lowestLow, "新低線 (出場)", color = color.new(color.red, 0), linewidth = 2)
 plot(ma, "MA 趨勢線", color = color.new(color.blue, 0), linewidth = 2)
-plot(strategy.position_size > 0 ? chandStop : na, "Chandelier 止損", color = color.new(color.orange, 0), linewidth = 2, style = plot.style_linebr)
 
 plotshape(isHighestHigh, "新高突破", shape.labeldown, location.abovebar, color = color.green, text = "HH", textcolor = color.white, size = size.tiny)
 plotshape(isLowestLow, "新低出場", shape.labelup, location.belowbar, color = color.red, text = "LL", textcolor = color.white, size = size.tiny)

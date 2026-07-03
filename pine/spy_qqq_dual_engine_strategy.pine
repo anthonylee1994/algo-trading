@@ -39,6 +39,10 @@ mrBuyTh     = input.int(10, "RSI 買入門檻 (<)", minval = 1, maxval = 50, gro
 mrSellTh    = input.int(70, "RSI 賣出門檻 (>)", minval = 50, maxval = 99, group = "RSI2 撈底引擎")
 maLen       = input.int(200, "趨勢 MA (撈底只喺 MA 之上)", minval = 1, group = "RSI2 撈底引擎")
 
+// --- 輸入參數: 風險控制 ---
+useStop     = input.bool(true, "啟用止蝕", group = "風險控制")
+stopPct     = input.float(8.0, "止蝕百分比 (%)", minval = 0.5, maxval = 50, step = 0.5, group = "風險控制")
+
 // --- 指標計算 ---
 macdLine    = ta.ema(close, fastLen) - ta.ema(close, slowLen) // 淨 MACD, 唔使訊號線
 highestHigh = ta.highest(high, breakoutLen)[1] // 前一根 K 線為止嘅極值, 避免自己計入
@@ -53,25 +57,32 @@ mrEntry = useMr and rsiVal < mrBuyTh and close > ma       // 撈底入場
 mrExit  = rsiVal > mrSellTh                               // 撈底出場
 
 // --- 交易執行: 突破優先, 同一時間只持一個倉 ---
-var string mode = ""
+var string mode      = ""
+var float  stopPrice = na
 
 if strategy.position_size <= 0
+    stopPrice := na
     if boEntry
         strategy.entry("突破", strategy.long)
         mode := "BO"
+        stopPrice := close * (1 - stopPct / 100)
     else if mrEntry
         strategy.entry("撈底", strategy.long)
         mode := "MR"
+        stopPrice := close * (1 - stopPct / 100)
 else
     if mode == "BO" and boExit
         strategy.close("突破")
     else if mode == "MR" and mrExit
         strategy.close("撈底")
+    else if useStop and not na(stopPrice)
+        strategy.exit("止蝕", from_entry = mode == "BO" ? "突破" : "撈底", stop = stopPrice)
 
 // --- 繪圖可視化 ---
 plot(highestHigh, "新高線 (突破)", color = color.new(color.green, 60), linewidth = 1)
 plot(lowestLow, "新低線 (出場)", color = color.new(color.red, 60), linewidth = 1)
 plot(ma, "趨勢 MA", color = color.new(color.blue, 50), linewidth = 2)
+plot(useStop and strategy.position_size > 0 ? stopPrice : na, "止蝕線", color = color.new(color.red, 20), linewidth = 1, style = plot.style_circles)
 
 bgcolor(strategy.position_size > 0 ? (mode == "BO" ? color.new(color.green, 92) : color.new(color.aqua, 92)) : na)
 

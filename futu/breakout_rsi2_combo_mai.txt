@@ -1,8 +1,8 @@
 {順勢突破 + RSI2 撈底 組合：兩個互補引擎，同一時間只持一個倉，突破優先}
-{對應 pine/breakout_rsi2_combo_strategy.pine，由 Pine Script strategy 轉成富途 MAI 主圖指標}
-{引擎一 突破：15日新高 + MACD(5,35)>0 入場，20日新低出場}
+{對應 pine/breakout_rsi2_combo_strategy.pine，逐日訊號已同 Pine 版驗證吻合}
+{引擎一 突破：15日新高 且 MACD(5,35) DIF>0 入場，跌穿20日新低出場}
 {引擎二 撈底：空倉時 RSI(2)<10 且企喺 200MA 之上入場，RSI(2)>70 出場}
-{2026-07 回測 (QQQ 2009-2026)：Sharpe 1.12 / CAGR 16.4% / MaxDD -21.6%，訊號同 Pine 版驗證吻合}
+{2026-07 回測 QQQ 2009-2026：Sharpe 1.12 / CAGR 16.4% / MaxDD -21.6%}
 
 BREAKOUTLEN:=15;
 EXITLEN:=20;
@@ -18,10 +18,12 @@ HIGHESTHIGH:=REF(HHV(HIGH,BREAKOUTLEN),1);
 LOWESTLOW:=REF(LLV(LOW,EXITLEN),1);
 MALINE:=MA(CLOSE,MALEN);
 
+{MACD 快慢線差 DIF}
 DIF:=EMA(CLOSE,FASTLEN)-EMA(CLOSE,SLOWLEN);
 
-{Wilder RSI，SMA(X,N,1) 即係 1/N 平滑}
-RSIVAL:=SMA(MAX(CLOSE-REF(CLOSE,1),0),RSILEN,1)/SMA(ABS(CLOSE-REF(CLOSE,1)),RSILEN,1)*100;
+{Wilder RSI：SMA(X,N,1) 係 1/N 平滑}
+LC:=REF(CLOSE,1);
+RSIVAL:=SMA(MAX(CLOSE-LC,0),RSILEN,1)/SMA(ABS(CLOSE-LC),RSILEN,1)*100;
 
 {四個原始條件：持倉期間會重複觸發，下面用狀態機過濾}
 BOENTRY:=HIGH>HIGHESTHIGH AND DIF>0;
@@ -32,28 +34,28 @@ MREXIT:=RSIVAL>MRSELLTH;
 {突破引擎狀態：最近一次入場條件比出場條件近 = 持倉中}
 BOSTATE:=BARSLAST(BOENTRY)<BARSLAST(BOEXIT);
 
-{撈底引擎：突破態期間唔准入場；REF(BOSTATE,1) 係 1-bar 延遲，}
-{對齊「突破出場同撈底條件同日觸發時，要下一日先可以再入」嘅真實交易時序}
-MRENTRY:=MRRAW AND NOT(BOSTATE) AND NOT(REF(BOSTATE,1));
+{撈底引擎：突破態期間唔准入場（BOSTATE=0 先有效）}
+{REF(BOSTATE,1)=0 係 1-bar 延遲：突破出場同撈底條件同日觸發時，要下一日先可以再入}
+MRENTRY:=MRRAW AND BOSTATE=0 AND REF(BOSTATE,1)=0;
 MRSTATE:=BARSLAST(MRENTRY)<BARSLAST(MREXIT);
 
-{合併持倉狀態，只喺翻轉嗰根 K 線出訊號，唔會重複}
-{注意：歷史最初 warm-up (~260 根 K 線) 狀態未穩定}
+{合併持倉狀態；LONGSTATE 係 0/1，用大小比較搵翻轉位，唔會重複出訊號}
+{注意：歷史最初 warm-up (~260 根 K 線) 兩邊條件未齊觸發過，狀態未穩定}
 LONGSTATE:=BOSTATE OR MRSTATE;
-BUY:=LONGSTATE AND NOT(REF(LONGSTATE,1));
-SELL:=NOT(LONGSTATE) AND REF(LONGSTATE,1);
+BUY:=LONGSTATE>REF(LONGSTATE,1);
+SELL:=LONGSTATE<REF(LONGSTATE,1);
 
 {區分邊個引擎出訊號}
 BUYBO:=BUY AND BOSTATE;
-BUYMR:=BUY AND NOT(BOSTATE);
+BUYMR:=BUY AND MRSTATE AND BOSTATE=0;
 SELLMR:=SELL AND REF(MRSTATE,1);
-SELLBO:=SELL AND NOT(REF(MRSTATE,1));
+SELLBO:=SELL AND REF(MRSTATE,1)=0;
 
 新高線:HIGHESTHIGH,COLORGREEN;
 新低線:LOWESTLOW,COLORRED;
 MA趨勢線:MALINE,COLORBLUE;
 
 DRAWTEXT(BUYBO,LOW,'突破買'),COLORGREEN;
-DRAWTEXT(BUYMR,LOW,'撈底買'),COLORLICYAN;
+DRAWTEXT(BUYMR,LOW,'撈底買'),COLORCYAN;
 DRAWTEXT(SELLBO,HIGH,'突破賣'),COLORRED;
 DRAWTEXT(SELLMR,HIGH,'撈底賣'),COLORYELLOW;

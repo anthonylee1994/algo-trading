@@ -1,0 +1,96 @@
+//@version=6
+strategy("Weinstein 股價四階段 (30週線)",
+     overlay = true,
+     pyramiding = 0,
+     initial_capital = 100000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 100,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.02,
+     slippage = 1,
+     process_orders_on_close = true)
+
+// ============================================================
+// Stan Weinstein《Secrets For Profiting in Bull and Bear Markets》(1988)
+// 股價四階段, 用 30 週線斜率 + 價格相對位置分類:
+//   第一階段 底部: 30週線由跌轉平, 價格圍住條線上落 (唔買, 等突破)
+//   第二階段 上漲: 價格企線上 + 線向上 → 揸貨
+//   第三階段 頂部: 線由升轉平, 價格圍線波動 (減磅/離場)
+//   第四階段 下跌: 價格跌穿線 + 線向下 → 空倉
+//
+// 2026-07-04 回測驗證 (yfinance 日線, 150日SMA≈30週, 連 2bps 成本):
+//   淨第二階段揸貨 (預設):
+//     QQQ full: Sharpe 0.64 / CAGR 9.2% / DD -54.9%  (BH: 0.45 / -83%)
+//     QQQ 09- : Sharpe 1.03 / CAGR 15.4% / DD -21.9% (BH: 1.01 / -35%)
+//     SPY full: Sharpe 0.67 / CAGR 6.9% / DD -23.7%  (BH: 0.53 / -55%)
+//   + 突破橫行區頂先入: SPY 更好 (0.74/-21.8%), QQQ 更差 (0.56) — 自己揀
+//   + 放量確認 (原著建議): 兩隻都大傷 (Sharpe 0.41/0.56), 預設熄,
+//     指數 ETF 成交量係恐慌指標唔係需求指標, 呢點 1988 年嘅個股經驗唔適用
+//   對照: 雙引擎策略 09- Sharpe 1.11 (QQQ) / 0.96 (SPY) — 仲係贏呢個
+// ============================================================
+
+// --- 輸入參數 ---
+maLen    = input.int(150, "均線日數 (日線用150≈30週; 週線圖用30)", minval = 10)
+slopeLb  = input.int(10, "均線斜率窗口", minval = 1)
+useBase  = input.bool(false, "入場要突破橫行區頂 (SPY 開/QQQ 熄)", group = "入場加強")
+baseLen  = input.int(30, "橫行區日數", minval = 5, group = "入場加強")
+useVol   = input.bool(false, "突破要放量 1.3x (已驗證有害, 唔建議)", group = "入場加強")
+showStageMarks = input.bool(true, "圖上標示每個階段", group = "視覺化")
+showStagePanel = input.bool(true, "右上角顯示目前階段", group = "視覺化")
+
+// --- 階段判斷 ---
+ma      = ta.sma(close, maLen)
+rising  = ma > ma[slopeLb]
+falling = ma < ma[slopeLb]
+
+// 明確狀態: 2 = 價上+線升, 4 = 價下+線跌; 過渡狀態按前一階段分流:
+// 離開第二階段 → 第三 (頂部), 離開第四階段 → 第一 (底部)
+var int stage = 1
+if close > ma and rising
+    stage := 2
+else if close < ma and falling
+    stage := 4
+else
+    stage := stage == 2 or stage == 3 ? 3 : 1
+
+// --- 訊號 ---
+baseHigh = ta.highest(high, baseLen)[1]
+volOk    = not useVol or volume > 1.3 * ta.sma(volume, 50)
+entryOk  = stage == 2 and (not useBase or high > baseHigh) and volOk
+exitOk   = stage != 2
+
+if strategy.position_size <= 0 and entryOk
+    strategy.entry("第二階段", strategy.long)
+if strategy.position_size > 0 and exitOk
+    strategy.close("第二階段", comment = stage == 3 ? "入第三階段" : "入第四階段")
+
+// --- 視覺化: 四階段背景 + 階段標示 ---
+stageColor = stage == 1 ? color.gray :
+     stage == 2 ? color.green :
+     stage == 3 ? color.orange :
+     color.red
+stageName = stage == 1 ? "第一階段 底部" :
+     stage == 2 ? "第二階段 上漲" :
+     stage == 3 ? "第三階段 頂部" :
+     "第四階段 下跌"
+stageChanged = bar_index > 0 and stage != stage[1]
+
+bgcolor(color.new(stageColor, stage == 2 or stage == 4 ? 90 : 88))
+
+plot(ma, "30週線", color = rising ? color.new(color.green, 20) : falling ? color.new(color.red, 20) : color.new(color.gray, 20), linewidth = 2)
+
+plotshape(stage == 2 and stage[1] != 2, "入第二階段", shape.triangleup, location.belowbar, color = color.green, size = size.small)
+plotshape(stage != 2 and stage[1] == 2, "離開第二階段", shape.triangledown, location.abovebar, color = color.red, size = size.small)
+plotshape(showStageMarks and stageChanged and stage == 1, "第一階段標示", shape.labelup, location.belowbar, color = color.gray, text = "第一階段\n底部", textcolor = color.white, size = size.tiny)
+plotshape(showStageMarks and stageChanged and stage == 2, "第二階段標示", shape.labelup, location.belowbar, color = color.green, text = "第二階段\n上漲", textcolor = color.white, size = size.tiny)
+plotshape(showStageMarks and stageChanged and stage == 3, "第三階段標示", shape.labeldown, location.abovebar, color = color.orange, text = "第三階段\n頂部", textcolor = color.white, size = size.tiny)
+plotshape(showStageMarks and stageChanged and stage == 4, "第四階段標示", shape.labeldown, location.abovebar, color = color.red, text = "第四階段\n下跌", textcolor = color.white, size = size.tiny)
+
+var table stagePanel = table.new(position.top_right, 1, 1)
+if showStagePanel and barstate.islast
+    table.cell(stagePanel, 0, 0, stageName, bgcolor = color.new(stageColor, 15), text_color = color.white)
+else if not showStagePanel and barstate.islast
+    table.cell(stagePanel, 0, 0, "", bgcolor = color.new(color.white, 100), text_color = color.new(color.white, 100))
+
+// Data window
+plot(stage, "階段 (1-4)", color = color.blue, display = display.data_window)

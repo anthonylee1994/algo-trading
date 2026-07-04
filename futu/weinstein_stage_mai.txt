@@ -1,0 +1,55 @@
+{Weinstein 股價四階段 (30週線)：Stan Weinstein 1988《Secrets For Profiting in Bull and Bear Markets》}
+{對應 pine/weinstein_stage_strategy.pine，日線用 150日MA≈30週線；週線圖將 MALEN 改 30}
+{階段判斷：2=價上+線升(揸貨) / 4=價下+線跌(空倉) / 3=升完轉平(頂部) / 1=跌完轉平(底部)}
+{2026-07-04 回測驗證 (日線, 連 2bps 成本, 淨第二階段揸貨)：}
+{  QQQ full: Sharpe 0.64 / CAGR 9.2% / DD -54.9%  (BH: 0.45 / -83%)}
+{  QQQ 09- : Sharpe 1.03 / CAGR 15.4% / DD -21.9% (BH: 1.01 / -35%)}
+{  SPY full: Sharpe 0.67 / CAGR 6.9% / DD -23.7%  (BH: 0.53 / -55%)}
+{USEBASE=1 (突破橫行區頂先入)：SPY 更好 (0.74)，QQQ 更差 (0.56)，炒 SPY 先開}
+{放量確認已驗證有害 (Sharpe 腰斬)，本 script 冇呢個選項}
+{注意：warm-up 需要 ~160 根 K 線，開頭嗰段階段判斷未穩定}
+
+MALEN:=150;
+SLOPELB:=10;
+USEBASE:=0;
+BASELEN:=30;
+
+{30週線 + 斜率}
+MALINE:=MA(CLOSE,MALEN);
+RISING:=MALINE>REF(MALINE,SLOPELB);
+FALLING:=MALINE<REF(MALINE,SLOPELB);
+
+{階段判斷：明確狀態係 2 同 4；過渡狀態睇最近由邊個明確狀態出嚟}
+{啱啱先喺第二階段 → 而家係第三 (頂部)；啱啱先喺第四階段 → 而家係第一 (底部)}
+S2COND:=CLOSE>MALINE AND RISING;
+S4COND:=CLOSE<MALINE AND FALLING;
+STAGE:=IF(S2COND,2,IF(S4COND,4,IF(BARSLAST(S2COND)<BARSLAST(S4COND),3,1)));
+
+{交易：第二階段揸貨，離開即走；USEBASE=1 時要突破 BASELEN 日橫行區頂先入}
+BASEHI:=REF(HHV(HIGH,BASELEN),1);
+ENTRYRAW:=S2COND AND (USEBASE=0 OR HIGH>BASEHI);
+EXITRAW:=S2COND=0;
+LONGSTATE:=BARSLAST(ENTRYRAW)<BARSLAST(EXITRAW);
+BUY:=LONGSTATE>REF(LONGSTATE,1);
+SELL:=LONGSTATE<REF(LONGSTATE,1);
+
+{出場區分去咗邊個階段}
+SELL3:=SELL AND STAGE=3;
+SELL4:=SELL AND STAGE=4;
+
+{30週線著色靠唔到 MAI 動態色，用三條線疊出嚟：邊段有值邊段顯示}
+線升:IF(RISING,MALINE,DRAWNULL),COLORGREEN;
+線跌:IF(FALLING,MALINE,DRAWNULL),COLORRED;
+線平:IF(RISING=0 AND FALLING=0,MALINE,DRAWNULL),COLORGRAY;
+
+{階段轉變標示：喺轉階段嗰支燭出文字}
+STAGECHG:=STAGE<>REF(STAGE,1);
+DRAWTEXT(STAGECHG AND STAGE=1,LOW*0.99,'一底部'),COLORGRAY;
+DRAWTEXT(STAGECHG AND STAGE=2,LOW*0.99,'二上漲'),COLORGREEN;
+DRAWTEXT(STAGECHG AND STAGE=3,HIGH*1.01,'三頂部'),COLORYELLOW;
+DRAWTEXT(STAGECHG AND STAGE=4,HIGH*1.01,'四下跌'),COLORRED;
+
+{買賣訊號：白色文字，上下錯開}
+DRAWTEXT(BUY,LOW*0.975,'買入'),COLORWHITE;
+DRAWTEXT(SELL3,HIGH*1.025,'賣出→頂部'),COLORWHITE;
+DRAWTEXT(SELL4,HIGH*1.025,'賣出→下跌'),COLORWHITE;

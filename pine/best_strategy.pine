@@ -28,7 +28,7 @@ profile = input.string("Vol-Target (QQQ/SPY/GOOG)", "模式",
 grpVT = "Vol-Target (預設適用 QQQ / SPY / GOOG)"
 vtTarget = input.float(40.0, "目標年化波動 %", minval = 10, maxval = 60, step = 1, group = grpVT)
 vtVolLen = input.int(40, "波動窗口 (日)", minval = 10, group = grpVT)
-vtMaxLev = input.float(2.0, "最大槓桿", minval = 1.0, maxval = 3.0, step = 0.25, group = grpVT)
+vtMaxLev = input.float(1.5, "最大槓桿", minval = 1.0, maxval = 3.0, step = 0.25, group = grpVT)
 vtMinLev = input.float(0.0, "最小槓桿", minval = 0.0, maxval = 1.0, step = 0.05, group = grpVT)
 vtRebal  = input.string("Daily", "再平衡", options = ["Daily", "Weekly"], group = grpVT)
 vtBand   = input.float(0.0, "再平衡帶", minval = 0.0, maxval = 0.5, step = 0.05, group = grpVT)
@@ -193,7 +193,7 @@ if showPanel and barstate.islast
         f_cell(0, 5, "再平衡", cBgLabel, cTxtDim)
         f_cell(1, 5, vtRebal + (needRebal ? " *" : ""), cBgVal, cTxt)
         f_cell(0, 6, "注意", cBgLabel, cTxtDim)
-        f_cell(1, 6, "40% / 2x 預設", cBgVal, cOrange)
+        f_cell(1, 6, "40% / 1.5x 預設", cBgVal, cOrange)
     else
         posTxt = strategy.position_size > 0 ? (mode == "BO" ? "突破倉" : "撈底倉") : "空倉"
         posCol = strategy.position_size > 0 ? (mode == "BO" ? cGreen : color.teal) : color.gray

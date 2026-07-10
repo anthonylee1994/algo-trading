@@ -5,12 +5,12 @@
 # 規則：
 #   1. 收集 41 個完成日線收市價，計出 40 個日回報。
 #   2. 實現波動 = 40 日日回報的母體標準差 * sqrt(252)。
-#   3. 目標槓桿 = clamp(40% / 實現波動, 0x, 2x)。
+#   3. 目標槓桿 = clamp(40% / 實現波動, 0x, 1.5x)。
 #   4. 每日按目標槓桿加倉或減倉，從不因技術指標清倉。
 #
 # 注意：
 # - 富途回測的融資利息、佣金、滑點必須在回測設定另行填寫。
-# - 此策略使用 max_qty_to_buy_on_margin 的剩餘 buying power 推算 2x 滿倉；
+# - 此策略使用 max_qty_to_buy_on_margin 的剩餘 buying power 推算設定槓桿的滿倉；
 #   請把回測帳戶的最大槓桿同 self.最大槓桿設定為一致。
 # - 策略重啟會重新累積 41 日資料；回測起始日請預留至少 41 個交易日 warm-up。
 
@@ -28,7 +28,7 @@ class Strategy(StrategyBase):
     def global_variables(self):
         self.目標年化波動 = 0.40
         self.波動窗口 = 40
-        self.最大槓桿 = 2.0
+        self.最大槓桿 = 1.5
         self.最小槓桿 = 0.0
         self.收市價 = []
 
@@ -76,7 +76,7 @@ class Strategy(StrategyBase):
         )
 
         # 現有倉位 + 尚可買股數 = 帳戶在現價下可達的最大倉位。
-        # 將它按目標槓桿比例縮放，令 2x 對應滿 margin 倉位、1x 約對應一半。
+        # 將它按目標槓桿比例縮放；設定最大槓桿對應滿 margin 倉位。
         最大可達股數 = 現有股數 + 可買股數
         一手 = lot_size(symbol=self.驅動標的)
         if 一手 <= 0:

@@ -33,7 +33,7 @@ USEMRSTOP:=1;
 {-- Vol-Target（USEVT=1）--}
 VTTARGET:=40;
 VTVOLLEN:=40;
-VTMAXLEV:=2.0;
+VTMAXLEV:=1.5;
 VTMINLEV:=0;
 {只影響圖表提示密度；實際建議槓桿仍然每日更新}
 VTLABELBAND:=0.10;

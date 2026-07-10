@@ -127,6 +127,7 @@ def analyze_ticker(ticker: str, start: str) -> pd.DataFrame:
         "Dual_tuned": run_weights(close, dual_w(d)),
         "MA200": run_weights(close, (close > d["ma"]).astype(float)),
         "VT30_cap1.5": run_weights(close, vt_w(d["vol"], 0.30, 1.5)),
+        "VT40_cap1.5": run_weights(close, vt_w(d["vol"], 0.40, 1.5)),
         "VT35_cap2": run_weights(close, vt_w(d["vol"], 0.35, 2.0)),
         "VT40_cap2": run_weights(close, vt_w(d["vol"], 0.40, 2.0)),
         "VT_adapt_1.3med": run_weights(close, vt_w(d["vol"], max(0.25, med_vol * 1.3), 2.5)),

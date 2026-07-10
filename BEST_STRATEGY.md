@@ -8,7 +8,7 @@
 
 ```text
 每日計 40 日日回報的年化波動率
-exposure = clip(40% / realizedVol, 0x, 2x)
+exposure = clip(40% / realizedVol, 0x, 1.5x)
 每天按目標 exposure 加倉或減倉（預設再平衡帶 = 0），但不因技術訊號清倉
 ```
 
@@ -19,7 +19,7 @@ exposure = clip(40% / realizedVol, 0x, 2x)
 
 ## 回測結果
 
-2026-07-09 Yahoo 調整後日線，`VT40 cap2`，5 bps + 3% 融資：
+2026-07-09 Yahoo 調整後日線，`VT40 cap1.5`，5 bps + 3% 融資：
 
 | 標的 | 時段         | Vol-Target CAGR | Buy-and-hold CAGR | 結果 |
 | ---- | ------------ | --------------: | ----------------: | ---- |
@@ -44,7 +44,7 @@ uv run python scripts/research_stock_beat_bh.py
 
 1. 開 QQQ、SPY 或 GOOG 日線。
 2. 貼 `pine/best_strategy.pine`。
-3. 保持預設模式 `Vol-Target (QQQ/SPY/GOOG)`，目標波動 40%、40 日窗口、最高 2x。
+3. 保持預設模式 `Vol-Target (QQQ/SPY/GOOG)`，目標波動 40%、40 日窗口、最高 1.5x。
 4. strategy properties 需要容許保證金，檔案已設 `margin_long = 50`。
 
 Pine 只會用已完成日線計波動，訂單下一根開市才執行；會按目標曝險與現有股數的差額落單，所以下調槓桿只是減倉，不會反手做空。
@@ -64,6 +64,6 @@ Pine 只會用已完成日線計波動，訂單下一根開市才執行；會按
 ## 代價
 
 1. 贏 CAGR 靠槓桿。唔借錢、曝險上限 1x，呢個目標做唔到。
-2. 回撤可以好深；不能把 2x 視為低風險。
+2. 回撤可以好深；不能把 1.5x 視為低風險。
 3. TradingView 沒有直接扣每日融資，Python 結果才是包括 3% 融資的可比較數字。
 4. 回測不保證未來仍然有效；每次要用新市場資料重跑三個 benchmark。

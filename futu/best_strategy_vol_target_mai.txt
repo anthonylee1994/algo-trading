@@ -1,13 +1,13 @@
-{Vol-Target（QQQ / SPY / GOOG）富途 MAI 主圖指標}
-{對應 futu/best_strategy_vol_target_quant.py}
-{MAI 只顯示建議槓桿及調倉提示；真正回測 / 下單請用 Python StrategyBase 版。}
+{VOL-TARGET（QQQ / SPY / GOOG）富途 MAI 主圖指標}
+{對應 FUTU/BEST_STRATEGY_VOL_TARGET_QUANT.PY}
+{MAI 只顯示建議槓桿及調倉提示；真正回測 / 下單請用 PYTHON STRATEGYBASE 版。}
 
 {═══ 參數 ═══}
 VTTARGET:=40;       {目標年化波動 %}
 VTVOLLEN:=40;       {波動窗口：交易日}
 VTMAXLEV:=2.0;      {最大槓桿}
 VTMINLEV:=0;        {最小槓桿}
-LABELBAND:=0.10;    {槓桿日變動 >= 0.1x 才顯示加減倉}
+LABELBAND:=0.05;    {槓桿日變動 >= 0.05X 才顯示加減倉（加密提示）}
 SHOWLABEL:=1;       {1=顯示提示，0=只睇數值}
 
 {═══ 40 日實現波動 ═══}
@@ -17,18 +17,18 @@ SHOWLABEL:=1;       {1=顯示提示，0=只睇數值}
 原始槓桿:=IF(實現波動>0,(VTTARGET/100)/實現波動,1);
 建議槓桿:=IF(原始槓桿>VTMAXLEV,VTMAXLEV,IF(原始槓桿<VTMINLEV,VTMINLEV,原始槓桿));
 
-{═══ 稀疏調倉提示 ═══}
+{═══ 調倉提示（LABELBAND 控制密度） ═══}
 槓桿變動:=建議槓桿-REF(建議槓桿,1);
 加倉:=SHOWLABEL AND 槓桿變動>=LABELBAND;
 減倉:=SHOWLABEL AND 槓桿變動<=-LABELBAND;
 高槓桿入場:=SHOWLABEL AND 建議槓桿>=1.5 AND REF(建議槓桿,1)<1.5;
 低槓桿入場:=SHOWLABEL AND 建議槓桿<=0.8 AND REF(建議槓桿,1)>0.8;
 
-DRAWTEXT(加倉,LOW*0.99,'加倉'),COLORGREEN;
-DRAWTEXT(減倉,HIGH*1.01,'減倉'),COLORRED;
-DRAWTEXT(高槓桿入場,LOW*0.98,'高槓桿'),COLORGREEN;
+DRAWTEXT(加倉,LOW*0.99,'加倉'),COLORYELLOW;
+DRAWTEXT(減倉,HIGH*1.01,'減倉'),COLORWHITE;
+DRAWTEXT(高槓桿入場,LOW*0.98,'高槓桿'),COLORYELLOW;
 DRAWTEXT(低槓桿入場,HIGH*1.02,'低槓桿'),COLORYELLOW;
 
 {═══ 數據視窗 ═══}
-實現波動pct:實現波動*100,NODRAW;
+實現波動PCT:實現波動*100,NODRAW;
 建議槓桿值:建議槓桿,NODRAW;

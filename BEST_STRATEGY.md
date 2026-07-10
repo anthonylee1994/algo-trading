@@ -90,12 +90,21 @@ SMH 09+ 幾乎單邊牛：
 
 ## 檔案
 
-| 檔                                   | 用途                       |
-| ------------------------------------ | -------------------------- |
-| `pine/best_strategy.pine`            | TV：SMH VT（預設）+ 雙引擎 |
-| `scripts/backtest_smh_vol_target.py` | SMH 跑贏死揸驗證           |
-| `scripts/backtest_best_composite.py` | 雙引擎對照                 |
-| `STRATEGY.md`                        | 多資產真主策略             |
+| 檔                                   | 用途                         |
+| ------------------------------------ | ---------------------------- |
+| `pine/best_strategy.pine`            | TradingView：雙引擎 + SMH VT |
+| **`futu/best_strategy_mai.txt`**     | **富途 MAI 主圖指標**        |
+| `scripts/backtest_smh_vol_target.py` | SMH 跑贏死揸驗證             |
+| `scripts/backtest_best_composite.py` | 雙引擎對照                   |
+| `STRATEGY.md`                        | 多資產真主策略               |
+
+### 富途 MAI 用法
+
+1. 牛牛 → 行情 → 技術指標 → 自訂指標 → 新建主圖
+2. 貼上 `futu/best_strategy_mai.txt` 全文 → 儲存
+3. `USEVT:=0` 雙引擎（突破買／撈底買／止蝕）；`USEVT:=1` SMH Vol-Target（加倉↑／減倉↓）
+4. 雙引擎已係調參版：RSI **15/75**、BO 止 **8%**、MR 止 **4%**
+5. 報錯 `SQRT` → 改 `*POWER(252,0.5)`；報錯 `NODRAW` → 刪檔案最底幾行數值輸出
 
 ---
 

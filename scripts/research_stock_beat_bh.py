@@ -7,7 +7,7 @@
 
 用法:
   uv run python scripts/research_stock_beat_bh.py
-  uv run python scripts/research_stock_beat_bh.py --tickers GOOGL,AAPL,NVDA
+  uv run python scripts/research_stock_beat_bh.py --tickers SPY,QQQ,GOOG
 """
 
 from __future__ import annotations
@@ -177,7 +177,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument(
         "--tickers",
-        default="GOOGL,AAPL,MSFT,META,AMZN,NVDA,SMH,QQQ",
+        default="SPY,QQQ,GOOG",
         help="comma-separated",
     )
     args = ap.parse_args()

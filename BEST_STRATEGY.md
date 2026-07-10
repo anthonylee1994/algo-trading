@@ -1,115 +1,69 @@
-# 最佳策略（綜合結論）
+# 最佳策略：Vol-Target
 
-> 2026-07 更新：**想 CAGR 跑贏 SMH 死揸，要用 Vol-Target，唔係雙引擎。**
-
----
-
-## 核心真相
-
-| 目標                       | 做法                                | 點解                              |
-| -------------------------- | ----------------------------------- | --------------------------------- |
-| **CAGR 跑贏 SMH buy&hold** | **長期 long SMH + Vol-Target 槓桿** | 半導體牛極強；空倉 = 錯過升浪     |
-| QQQ/SPY 風險管理           | 雙引擎（突破+RSI2）                 | 減 DD、Sharpe 佳；CAGR 未必贏死揸 |
-| 組合贏 QQQ                 | Top5 動量 + QQQ floor × VT          | `STRATEGY.md`                     |
-
-**雙引擎喺 SMH 上 09+ CAGR ~12% vs 死揸 ~28%——輸到仆街。**  
-再調 %R / 均線 / 止蝕都救唔到，因為問題係 **不在場**，唔係入場準唔準。
+> 2026-07 驗證：要同時贏 `QQQ`、`SPY`、`GOOG` buy-and-hold CAGR，預設唔再用雙引擎；改用長期持倉加波動率目標槓桿。
 
 ---
 
-## Profile A（預設）：SMH Vol-Target ← 贏死揸
+## 預設規則
 
-### 公式
-
-```
-realizedVol = stdev(daily_return, 40) * sqrt(252)
-leverage    = clip( targetVol / realizedVol, minLev, maxLev )
-每天（或每週）把 SMH 曝險調到 equity × leverage
+```text
+每日計 40 日日回報的年化波動率
+exposure = clip(40% / realizedVol, 0x, 2x)
+每天按目標 exposure 加倉或減倉（預設再平衡帶 = 0），但不因技術訊號清倉
 ```
 
-預設：`targetVol = 35%`，`maxLev = 2.0`，`minLev = 0.25`（高波只減倉唔清倉），`vol = 40 日`
+- 交易成本：每次調倉 5 bps
+- 融資：超過 1x 的部分按年利率 3% 計
+- 訊號只使用前一日已知波動率，下一日才承受回報，冇前視。
+- 這個策略的 edge 是 **vol-timed leverage**，不是預測股價。
 
-### 回測（5bps + 3% 融資）
+## 回測結果
+
+2026-07-09 Yahoo 調整後日線，`VT40 cap2`，5 bps + 3% 融資：
+
+| 標的 | 時段         | Vol-Target CAGR | Buy-and-hold CAGR | 結果 |
+| ---- | ------------ | --------------: | ----------------: | ---- |
+| SPY  | Full         |           16.2% |             10.9% | 贏   |
+| SPY  | 2009+        |           22.5% |             14.7% | 贏   |
+| SPY  | 2019+        |           25.7% |             17.5% | 贏   |
+| QQQ  | Full         |           23.4% |             15.1% | 贏   |
+| QQQ  | 2009+        |           32.7% |             20.7% | 贏   |
+| QQQ  | 2019+        |           35.0% |             23.5% | 贏   |
+| GOOG | Full (2014+) |           32.3% |             23.1% | 贏   |
+| GOOG | 2019+        |           39.4% |             29.2% | 贏   |
+
+重跑驗證：
 
 ```bash
-uv run python scripts/backtest_smh_vol_target.py
+uv run python scripts/research_stock_beat_bh.py
 ```
 
-| 時段 | B&H CAGR | VT35 cap2（約） | 結果 |
-| ---- | -------- | --------------- | ---- |
-| Full | ~10.8%   | **~14%**        | 贏   |
-| 09+  | ~28.2%   | **~32%**        | 贏   |
-| 19+  | ~42.8%   | **~49%**        | 贏   |
+輸出在 `output/stock_beat_bh_research.csv`。`GOOG` 2014 才有 Class C 歷史，所以 2009+ 與 Full 相同。
 
-進取版 VT40% 贏更多，DD 更深。
+## TradingView
 
-### 代價（一定要知）
+1. 開 QQQ、SPY 或 GOOG 日線。
+2. 貼 `pine/best_strategy.pine`。
+3. 保持預設模式 `Vol-Target (QQQ/SPY/GOOG)`，目標波動 40%、40 日窗口、最高 2x。
+4. strategy properties 需要容許保證金，檔案已設 `margin_long = 50`。
 
-1. **靠槓桿贏 CAGR**，唔係預測神技
-2. Sharpe 未必贏 B&H；MaxDD 仍然可以 -70%～-85%
-3. 要 **margin / 融資**；TV 回測往往 **唔扣融資利息** → 實盤 CAGR 會低啲
-4. 只用 **SMH**（或極類似半導體 ETF）
+Pine 只會用已完成日線計波動，訂單下一根開市才執行；會按目標曝險與現有股數的差額落單，所以下調槓桿只是減倉，不會反手做空。
 
-### TradingView
+## 富途 MAI
 
-1. 開 **SMH 日線**
-2. 貼 `pine/best_strategy.pine`
-3. 模式 = **SMH Vol-Target**
-4. Properties 開 margin（策略已設 margin_long=50 ≈ 最多 2x）
+`futu/best_strategy_mai.txt` 預設 `USEVT:=1`，顯示每日建議槓桿及加減倉提示。MAI 只是指標，不會代你執行融資或調倉。
 
----
+只需要 Vol-Target 的精簡 MAI 版可用 `futu/best_strategy_vol_target_mai.txt`；設 `SHOWLABEL:=0` 可隱藏所有圖上文字，只在數據欄看建議槓桿。
 
-## Profile B：雙引擎（QQQ/SPY）
+富途量化回測 / 交易版在 `futu/best_strategy_vol_target_quant.py`。驅動標的要設為**日 K 收市**觸發，回測起始日要預留至少 41 個交易日 warm-up，並在回測設定填入佣金、滑點及融資利息。
 
-```
-突破: 15日新高 + MACD(5,35)>0 → 入; 20日新低 / -8% → 出
-撈底: RSI2<15 + >200MA → 入; RSI2>75 / -4% → 出
-```
+## 舊雙引擎
 
-適合：唔借錢、想細回撤。  
-**唔適合：硬要 CAGR 贏 SMH 死揸。**
+突破 + RSI2 雙引擎仍然保留為 legacy 模式，適合想細回撤的人；但它會離場，對長期牛市有明顯空倉成本，回測未能達到贏 QQQ、SPY、GOOG buy-and-hold CAGR 的目標。
 
----
+## 代價
 
-## 點解雙引擎改到贏唔到 SMH？
-
-SMH 09+ 幾乎單邊牛：
-
-- 死揸 exposure ≈ 100%
-- 雙引擎 exposure ≈ 60–70%，仲要俾假突破打止蝕
-- 錯過嘅升幅 > 避過嘅跌幅
-
-所以要贏 CAGR 只有：
-
-1. **減少空倉**（最好係唔空）
-2. **低波加槓桿** 放大報酬
-
-= Vol-Target。同 FINDINGS §1「raw CAGR 贏要靠曝險 timing」完全一致。
-
----
-
-## 檔案
-
-| 檔                                   | 用途                         |
-| ------------------------------------ | ---------------------------- |
-| `pine/best_strategy.pine`            | TradingView：雙引擎 + SMH VT |
-| **`futu/best_strategy_mai.txt`**     | **富途 MAI 主圖指標**        |
-| `scripts/backtest_smh_vol_target.py` | SMH 跑贏死揸驗證             |
-| `scripts/backtest_best_composite.py` | 雙引擎對照                   |
-| `STRATEGY.md`                        | 多資產真主策略               |
-
-### 富途 MAI 用法
-
-1. 牛牛 → 行情 → 技術指標 → 自訂指標 → 新建主圖
-2. 貼上 `futu/best_strategy_mai.txt` 全文 → 儲存
-3. `USEVT:=0` 雙引擎（突破買／撈底買／止蝕）；`USEVT:=1` SMH Vol-Target（加倉↑／減倉↓）
-4. 雙引擎已係調參版：RSI **15/75**、BO 止 **8%**、MR 止 **4%**
-5. 報錯 `SQRT` → 改 `*POWER(252,0.5)`；報錯 `NODRAW` → 刪檔案最底幾行數值輸出
-
----
-
-## 期望管理
-
-- 「跑贏 SMH 死揸」= 接受槓桿同大回撤
-- 想瞓得着、少借錢 → 死揸 SMH 或者雙引擎減風險，**唔好硬贏 CAGR**
-- 槓桿唔係免費 alpha；只係把波動換 CAGR
+1. 贏 CAGR 靠槓桿。唔借錢、曝險上限 1x，呢個目標做唔到。
+2. 回撤可以好深；不能把 2x 視為低風險。
+3. TradingView 沒有直接扣每日融資，Python 結果才是包括 3% 融資的可比較數字。
+4. 回測不保證未來仍然有效；每次要用新市場資料重跑三個 benchmark。

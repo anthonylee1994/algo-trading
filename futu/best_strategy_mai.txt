@@ -2,20 +2,21 @@
 {對應 pine/best_strategy.pine、BEST_STRATEGY.md}
 {}
 {═══ 模式 ═══}
-{USEVT=0 雙引擎（預設）：突破 + RSI2 撈底，互斥，突破優先}
+{USEVT=1 Vol-Target（預設）：長期多頭 + 動態槓桿，目標係贏 QQQ / SPY / GOOG 死揸}
+{USEVT=0 雙引擎（legacy）：突破 + RSI2 撈底，互斥，突破優先}
 {  突破：15日新高 且 淨MACD(5,35)>0 → 入；跌穿20日新低 或 -8% 止蝕 → 出}
 {  撈底：空倉時 RSI(2)<15 且 close>200MA → 入；RSI(2)>75 或 -4% 止蝕 → 出}
-{USEVT=1 SMH Vol-Target 顯示：長期多頭 + 目標槓桿（專攻 CAGR 贏 SMH 死揸）}
+{USEVT=1 Vol-Target 顯示：長期多頭 + 目標槓桿（專攻 CAGR 贏 QQQ / SPY / GOOG 死揸）}
 {  lev = clamp( 目標波動% / 實現波動% , MINLEV , MAXLEV )}
 {  指標只顯示「建議槓桿」同加減倉提示，唔代客落單}
 {}
 {═══ 回測摘要 ═══}
-{雙引擎 (5bps)：QQQ 09+ Sh~1.07 / SPY 09+ Sh~1.04；SMH 牛市 CAGR 輸死揸}
-{SMH VT35% cap2 (3%fin)：full/09+/19+ CAGR 均贏 SMH 死揸 — 見 scripts/backtest_smh_vol_target.py}
+{雙引擎：減 DD 用；長期 CAGR 輸 QQQ / SPY / GOOG 死揸}
+{VT40% cap2 (5bps + 3% fin)：QQQ / SPY / GOOG 的 full、09+、19+ CAGR 均贏 B&H — 見 scripts/research_stock_beat_bh.py}
 {突破唔好加 200MA；撈底一定要 200MA 之上}
 {}
 {═══ 參數 ═══}
-USEVT:=0;
+USEVT:=1;
 {-- 雙引擎 --}
 BREAKOUTLEN:=15;
 EXITLEN:=20;
@@ -30,11 +31,12 @@ MRSTOPPCT:=4;
 USEBOSTOP:=1;
 USEMRSTOP:=1;
 {-- Vol-Target（USEVT=1）--}
-VTTARGET:=35;
+VTTARGET:=40;
 VTVOLLEN:=40;
 VTMAXLEV:=2.0;
-VTMINLEV:=0.25;
-VTBAND:=0.10;
+VTMINLEV:=0;
+{只影響圖表提示密度；實際建議槓桿仍然每日更新}
+VTLABELBAND:=0.10;
 
 {════════════════════════════════════════}
 { 共用指標 }
@@ -101,13 +103,15 @@ CURSTOP:=IF(BOSTATE0,BOSTOPPRICE,IF(MRSTATE0,MRSTOPPRICE,DRAWNULL));
 {════════════════════════════════════════}
 { USEVT=1：Vol-Target 加減倉提示（非進出場）}
 {════════════════════════════════════════}
-{槓桿較上日變幅超過 VTBAND 先提示}
+{槓桿較上日變幅超過 0.1x 先提示，避免每支 K 棒都寫字}
 LEVCHG:=ABS(LEV-REF(LEV,1));
-VTUP:=USEVT AND LEVCHG>=VTBAND AND LEV>REF(LEV,1);
-VTDOWN:=USEVT AND LEVCHG>=VTBAND AND LEV<REF(LEV,1);
-{高槓桿 / 低槓桿狀態著色用}
+VTUP:=USEVT AND LEVCHG>=VTLABELBAND AND LEV>REF(LEV,1);
+VTDOWN:=USEVT AND LEVCHG>=VTLABELBAND AND LEV<REF(LEV,1);
+{只在進入高槓桿 / 低槓桿區時標一次}
 HIGHLEV:=USEVT AND LEV>=1.5;
 LOWLEV:=USEVT AND LEV<=0.8;
+HIGHLEVENTRY:=HIGHLEV AND NOT(REF(HIGHLEV,1));
+LOWLEVENTRY:=LOWLEV AND NOT(REF(LOWLEV,1));
 
 {════════════════════════════════════════}
 { 畫線（主圖）}
@@ -134,16 +138,13 @@ DRAWTEXT(USEVT=0 AND SELLSTOP,HIGH*1.005,'止蝕'),COLORMAGENTA;
 {Vol-Target 提示}
 DRAWTEXT(USEVT AND VTUP,LOW*0.99,'加倉↑'),COLORGREEN;
 DRAWTEXT(USEVT AND VTDOWN,HIGH*1.01,'減倉↓'),COLORRED;
-DRAWTEXT(USEVT AND HIGHLEV,LOW*0.98,'高槓桿'),COLORGREEN;
-DRAWTEXT(USEVT AND LOWLEV,HIGH*1.02,'低槓桿'),COLORYELLOW;
+DRAWTEXT(USEVT AND HIGHLEVENTRY,LOW*0.98,'高槓桿'),COLORGREEN;
+DRAWTEXT(USEVT AND LOWLEVENTRY,HIGH*1.02,'低槓桿'),COLORYELLOW;
 
 {════════════════════════════════════════}
 { 輸出數值（數據欄 / 選股器可引用）}
 { 富途主圖公式：有「:」嘅會畫線；只要數值用 := 再配合輸出}
 {════════════════════════════════════════}
 {以下帶名輸出方便數據視窗睇}
-MACD值:DIF,NODRAW;
-RSI2值:RSIVAL,NODRAW;
 實現波動pct:IF(USEVT,REALVOL*100,DRAWNULL),NODRAW;
 建議槓桿:IF(USEVT,LEV,DRAWNULL),NODRAW;
-持倉態:IF(USEVT=0,LONGSTATE,1),NODRAW;

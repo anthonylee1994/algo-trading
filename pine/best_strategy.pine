@@ -1,5 +1,5 @@
 //@version=6
-strategy("BEST Strategy (SMH Vol-Target / 雙引擎)",
+strategy("BEST Strategy (Vol-Target / 雙引擎)",
      overlay = true,
      pyramiding = 0,
      initial_capital = 100000,
@@ -8,30 +8,30 @@ strategy("BEST Strategy (SMH Vol-Target / 雙引擎)",
      commission_type = strategy.commission.percent,
      commission_value = 0.05,
      slippage = 1,
-     process_orders_on_close = true,
+     process_orders_on_close = false,
      margin_long = 50,
      margin_short = 100)
 
 // ============================================================
-// Profile A SMH Vol-Target: 長期 long + 動態槓桿 → CAGR 贏 SMH 死揸
-// Profile B 雙引擎: 突破+RSI2 → QQQ/SPY 風險管理
-// 詳見 BEST_STRATEGY.md / scripts/backtest_smh_vol_target.py
+// Profile A Vol-Target: 長期 long + 動態槓桿 → CAGR 贏 QQQ / SPY / GOOG 死揸
+// Profile B 雙引擎: 突破+RSI2 → legacy 風險管理，唔係 CAGR 冠軍
+// 詳見 BEST_STRATEGY.md / scripts/research_stock_beat_bh.py
 // ============================================================
 
 // --- Profile ---
 grpP = "0) 策略模式"
-profile = input.string("雙引擎 (QQQ/SPY/SMH)", "模式",
-     options = ["SMH Vol-Target", "雙引擎 (QQQ/SPY/SMH)"],
+profile = input.string("Vol-Target (QQQ/SPY/GOOG)", "模式",
+     options = ["Vol-Target (QQQ/SPY/GOOG)", "雙引擎 (legacy 風險管理)"],
      group = grpP)
 
 // --- Vol-Target ---
-grpVT = "SMH Vol-Target"
-vtTarget = input.float(35.0, "目標年化波動 %", minval = 10, maxval = 60, step = 1, group = grpVT)
+grpVT = "Vol-Target (預設適用 QQQ / SPY / GOOG)"
+vtTarget = input.float(40.0, "目標年化波動 %", minval = 10, maxval = 60, step = 1, group = grpVT)
 vtVolLen = input.int(40, "波動窗口 (日)", minval = 10, group = grpVT)
 vtMaxLev = input.float(2.0, "最大槓桿", minval = 1.0, maxval = 3.0, step = 0.25, group = grpVT)
-vtMinLev = input.float(0.25, "最小槓桿", minval = 0.0, maxval = 1.0, step = 0.05, group = grpVT)
+vtMinLev = input.float(0.0, "最小槓桿", minval = 0.0, maxval = 1.0, step = 0.05, group = grpVT)
 vtRebal  = input.string("Daily", "再平衡", options = ["Daily", "Weekly"], group = grpVT)
-vtBand   = input.float(0.10, "再平衡帶", minval = 0.0, maxval = 0.5, step = 0.05, group = grpVT)
+vtBand   = input.float(0.0, "再平衡帶", minval = 0.0, maxval = 0.5, step = 0.05, group = grpVT)
 
 // --- 雙引擎: 突破 ---
 grpBO = "雙引擎: 突破"
@@ -79,7 +79,7 @@ cAqua    = color.new(#18ffff, 0)
 // ============================================================
 // 指標
 // ============================================================
-isVT = profile == "SMH Vol-Target"
+isVT = profile == "Vol-Target (QQQ/SPY/GOOG)"
 
 ret1 = close / close[1] - 1.0
 realizedVol = ta.stdev(ret1, vtVolLen) * math.sqrt(252)
@@ -106,9 +106,10 @@ needRebal = isRebalBar and (math.abs(lev - lastLev) >= vtBand or strategy.positi
 eqEst = strategy.equity > 0 ? strategy.equity : strategy.initial_capital
 // percent_of_equity 用動態 qty: 股數 = equity * lev / price
 targetQty = eqEst * lev / math.max(close, syminfo.mintick)
+qtyDelta = targetQty - strategy.position_size
 
-if isVT and bar_index > vtVolLen and needRebal and targetQty > 0
-    strategy.entry("SMH-VT", strategy.long, qty = targetQty)
+if isVT and bar_index > vtVolLen and needRebal and math.abs(qtyDelta) > 0
+    strategy.order("VT 再平衡", qtyDelta > 0 ? strategy.long : strategy.short, qty = math.abs(qtyDelta))
     lastLev := lev
 
 // ============================================================
@@ -180,7 +181,7 @@ if showPanel and barstate.islast
         posTxt = strategy.position_size > 0 ? "Long VT" : "Flat"
         posCol = strategy.position_size > 0 ? cGreen : color.gray
         f_cell(0, 0, "BEST", cBgHead, cTxt)
-        f_cell(1, 0, "SMH Vol-Target", color.new(#6a1b9a, 0), cTxt)
+        f_cell(1, 0, syminfo.ticker + " Vol-Target", color.new(#6a1b9a, 0), cTxt)
         f_cell(0, 1, "實現波動", cBgLabel, cTxtDim)
         f_cell(1, 1, str.tostring(realizedVol * 100, "#.1") + "%", cBgVal, cTxt)
         f_cell(0, 2, "目標槓桿", cBgLabel, cTxtDim)
@@ -192,7 +193,7 @@ if showPanel and barstate.islast
         f_cell(0, 5, "再平衡", cBgLabel, cTxtDim)
         f_cell(1, 5, vtRebal + (needRebal ? " *" : ""), cBgVal, cTxt)
         f_cell(0, 6, "注意", cBgLabel, cTxtDim)
-        f_cell(1, 6, "CAGR靠槓桿", cBgVal, cOrange)
+        f_cell(1, 6, "40% / 2x 預設", cBgVal, cOrange)
     else
         posTxt = strategy.position_size > 0 ? (mode == "BO" ? "突破倉" : "撈底倉") : "空倉"
         posCol = strategy.position_size > 0 ? (mode == "BO" ? cGreen : color.teal) : color.gray

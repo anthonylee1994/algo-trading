@@ -1,0 +1,220 @@
+//@version=6
+strategy("BEST Strategy (SMH Vol-Target / 雙引擎)",
+     overlay = true,
+     pyramiding = 0,
+     initial_capital = 100000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 100,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.05,
+     slippage = 1,
+     process_orders_on_close = true,
+     margin_long = 50,
+     margin_short = 100)
+
+// ============================================================
+// Profile A SMH Vol-Target: 長期 long + 動態槓桿 → CAGR 贏 SMH 死揸
+// Profile B 雙引擎: 突破+RSI2 → QQQ/SPY 風險管理
+// 詳見 BEST_STRATEGY.md / scripts/backtest_smh_vol_target.py
+// ============================================================
+
+// --- Profile ---
+grpP = "0) 策略模式"
+profile = input.string("雙引擎 (QQQ/SPY/SMH)", "模式",
+     options = ["SMH Vol-Target", "雙引擎 (QQQ/SPY/SMH)"],
+     group = grpP)
+
+// --- Vol-Target ---
+grpVT = "SMH Vol-Target"
+vtTarget = input.float(35.0, "目標年化波動 %", minval = 10, maxval = 60, step = 1, group = grpVT)
+vtVolLen = input.int(40, "波動窗口 (日)", minval = 10, group = grpVT)
+vtMaxLev = input.float(2.0, "最大槓桿", minval = 1.0, maxval = 3.0, step = 0.25, group = grpVT)
+vtMinLev = input.float(0.25, "最小槓桿", minval = 0.0, maxval = 1.0, step = 0.05, group = grpVT)
+vtRebal  = input.string("Daily", "再平衡", options = ["Daily", "Weekly"], group = grpVT)
+vtBand   = input.float(0.10, "再平衡帶", minval = 0.0, maxval = 0.5, step = 0.05, group = grpVT)
+
+// --- 雙引擎: 突破 ---
+grpBO = "雙引擎: 突破"
+breakoutLen = input.int(15, "新高日數", minval = 1, group = grpBO)
+exitLen     = input.int(20, "新低日數", minval = 1, group = grpBO)
+fastLen     = input.int(5, "MACD 快", minval = 1, group = grpBO)
+slowLen     = input.int(35, "MACD 慢", minval = 1, group = grpBO)
+useBo       = input.bool(true, "啟用突破", group = grpBO)
+
+// --- 雙引擎: RSI2 ---
+grpMR = "雙引擎: RSI2 撈底"
+useMr    = input.bool(true, "啟用撈底", group = grpMR)
+rsiLen   = input.int(2, "RSI 長度", minval = 1, group = grpMR)
+mrBuyTh  = input.int(15, "RSI 買 <", minval = 1, maxval = 40, group = grpMR)
+mrSellTh = input.int(75, "RSI 賣 >", minval = 50, maxval = 99, group = grpMR)
+maLen    = input.int(200, "撈底 MA", minval = 50, group = grpMR)
+
+// --- 雙引擎: 止蝕 ---
+grpRisk = "雙引擎: 止蝕"
+useBoStop = input.bool(true, "突破止蝕", group = grpRisk)
+boStopPct = input.float(8.0, "突破止蝕 %", minval = 0.5, group = grpRisk)
+useMrStop = input.bool(true, "撈底止蝕", group = grpRisk)
+mrStopPct = input.float(4.0, "撈底止蝕 %", minval = 0.5, group = grpRisk)
+
+// --- 視覺 ---
+grpVis = "視覺化"
+showLevels = input.bool(true, "顯示水平線", group = grpVis)
+showPanel  = input.bool(true, "狀態面板 (右上)", group = grpVis)
+panelPos   = input.string("右上", "面板位置",
+     options = ["右上", "左上", "右下", "左下"], group = grpVis)
+
+// ============================================================
+// 共用顏色 (深色主題高對比)
+// ============================================================
+cBgHead  = color.new(#1a1a2e, 0)
+cBgLabel = color.new(#16213e, 0)
+cBgVal   = color.new(#0f3460, 0)
+cTxt     = color.white
+cTxtDim  = color.new(#e8e8e8, 0)
+cGreen   = color.new(#00c853, 0)
+cRed     = color.new(#ff5252, 0)
+cOrange  = color.new(#ffab40, 0)
+cAqua    = color.new(#18ffff, 0)
+
+// ============================================================
+// 指標
+// ============================================================
+isVT = profile == "SMH Vol-Target"
+
+ret1 = close / close[1] - 1.0
+realizedVol = ta.stdev(ret1, vtVolLen) * math.sqrt(252)
+rawLev = na(realizedVol) or realizedVol <= 0 ? 1.0 : (vtTarget / 100.0) / realizedVol
+lev = math.max(vtMinLev, math.min(vtMaxLev, rawLev))
+isRebalBar = vtRebal == "Daily" ? true : ta.change(time("W")) != 0
+
+macdLine = ta.ema(close, fastLen) - ta.ema(close, slowLen)
+hh = ta.highest(high, breakoutLen)[1]
+ll = ta.lowest(low, exitLen)[1]
+ma = ta.sma(close, maLen)
+rsiVal = ta.rsi(close, rsiLen)
+
+boEntry = useBo and high > hh and macdLine > 0
+boExit  = low < ll
+mrEntry = useMr and rsiVal < mrBuyTh and close > ma
+mrExit  = rsiVal > mrSellTh
+
+// ============================================================
+// 交易 A: Vol-Target
+// ============================================================
+var float lastLev = 1.0
+needRebal = isRebalBar and (math.abs(lev - lastLev) >= vtBand or strategy.position_size == 0)
+eqEst = strategy.equity > 0 ? strategy.equity : strategy.initial_capital
+// percent_of_equity 用動態 qty: 股數 = equity * lev / price
+targetQty = eqEst * lev / math.max(close, syminfo.mintick)
+
+if isVT and bar_index > vtVolLen and needRebal and targetQty > 0
+    strategy.entry("SMH-VT", strategy.long, qty = targetQty)
+    lastLev := lev
+
+// ============================================================
+// 交易 B: 雙引擎
+// ============================================================
+var string mode = ""
+var float  stopPx = na
+
+if not isVT
+    if strategy.position_size <= 0
+        stopPx := na
+        if boEntry
+            strategy.entry("突破", strategy.long)
+            mode := "BO"
+            stopPx := useBoStop ? close * (1.0 - boStopPct / 100.0) : na
+        else if mrEntry
+            strategy.entry("撈底", strategy.long)
+            mode := "MR"
+            stopPx := useMrStop ? close * (1.0 - mrStopPct / 100.0) : na
+    else
+        if mode == "BO"
+            if boExit
+                strategy.close("突破", comment = "跌穿新低")
+            else if useBoStop and not na(stopPx)
+                strategy.exit("BO止蝕", from_entry = "突破", stop = stopPx)
+        else if mode == "MR"
+            if mrExit
+                strategy.close("撈底", comment = "RSI超買")
+            else if useMrStop and not na(stopPx)
+                strategy.exit("MR止蝕", from_entry = "撈底", stop = stopPx)
+
+// ============================================================
+// 圖層
+// ============================================================
+plot(showLevels and not isVT ? hh : na, "突破新高", color = color.new(color.green, 50))
+plot(showLevels and not isVT ? ll : na, "出場新低", color = color.new(color.red, 50))
+plot(showLevels and not isVT ? ma : na, "200MA", color = color.new(color.blue, 40), linewidth = 2)
+plot(not isVT and strategy.position_size > 0 and not na(stopPx) ? stopPx : na, "止蝕",
+     color = color.new(color.fuchsia, 20), style = plot.style_circles)
+
+plot(isVT ? lev : na, "目標槓桿", color = cOrange, display = display.data_window)
+plot(isVT ? realizedVol * 100 : na, "實現波動%", color = color.purple, display = display.data_window)
+plot(macdLine, "MACD", display = display.data_window)
+plot(rsiVal, "RSI2", display = display.data_window)
+
+bgcolor(isVT ? (lev >= 1.5 ? color.new(color.green, 92) : lev <= 0.8 ? color.new(color.orange, 93) : na) : strategy.position_size > 0 ? (mode == "BO" ? color.new(color.green, 92) : color.new(color.aqua, 92)) : na)
+
+plotshape(not isVT and strategy.position_size <= 0 and boEntry, "BO入", shape.triangleup, location.belowbar, color = color.lime, size = size.small, text = "BO")
+plotshape(not isVT and strategy.position_size <= 0 and not boEntry and mrEntry, "MR入", shape.triangleup, location.belowbar, color = color.aqua, size = size.small, text = "MR")
+
+// ============================================================
+// 狀態面板 — 全部 cell 強制白字 + 深色底 (修復深色主題睇唔到)
+// ============================================================
+posMap = panelPos == "左上" ? position.top_left : panelPos == "右下" ? position.bottom_right : panelPos == "左下" ? position.bottom_left : position.top_right
+
+var table panel = table.new(posMap, 2, 7,
+     bgcolor = cBgHead,
+     border_width = 2,
+     border_color = color.new(#e0e0e0, 0),
+     frame_width = 2,
+     frame_color = color.new(#ffffff, 40))
+
+// 小工具: 填一格 label / value
+f_cell(int col, int row, string txt, color bg, color tc) =>
+    table.cell(panel, col, row, txt, bgcolor = bg, text_color = tc, text_halign = text.align_center, text_size = size.normal)
+
+if showPanel and barstate.islast
+    if isVT
+        posTxt = strategy.position_size > 0 ? "Long VT" : "Flat"
+        posCol = strategy.position_size > 0 ? cGreen : color.gray
+        f_cell(0, 0, "BEST", cBgHead, cTxt)
+        f_cell(1, 0, "SMH Vol-Target", color.new(#6a1b9a, 0), cTxt)
+        f_cell(0, 1, "實現波動", cBgLabel, cTxtDim)
+        f_cell(1, 1, str.tostring(realizedVol * 100, "#.1") + "%", cBgVal, cTxt)
+        f_cell(0, 2, "目標槓桿", cBgLabel, cTxtDim)
+        f_cell(1, 2, str.tostring(lev, "#.##") + "x", cBgVal, lev >= 1.5 ? cGreen : lev <= 0.8 ? cOrange : cTxt)
+        f_cell(0, 3, "曝險", cBgLabel, cTxtDim)
+        f_cell(1, 3, str.tostring(lev * 100, "#.0") + "%", cBgVal, cTxt)
+        f_cell(0, 4, "持倉", cBgLabel, cTxtDim)
+        f_cell(1, 4, posTxt, posCol, cTxt)
+        f_cell(0, 5, "再平衡", cBgLabel, cTxtDim)
+        f_cell(1, 5, vtRebal + (needRebal ? " *" : ""), cBgVal, cTxt)
+        f_cell(0, 6, "注意", cBgLabel, cTxtDim)
+        f_cell(1, 6, "CAGR靠槓桿", cBgVal, cOrange)
+    else
+        posTxt = strategy.position_size > 0 ? (mode == "BO" ? "突破倉" : "撈底倉") : "空倉"
+        posCol = strategy.position_size > 0 ? (mode == "BO" ? cGreen : color.teal) : color.gray
+        nextSig = boEntry ? "突破就緒" : mrEntry ? "撈底就緒" : "等待"
+        nextCol = boEntry ? cGreen : mrEntry ? cAqua : cTxt
+        f_cell(0, 0, "BEST", cBgHead, cTxt)
+        f_cell(1, 0, posTxt, posCol, cTxt)
+        f_cell(0, 1, "MACD", cBgLabel, cTxtDim)
+        f_cell(1, 1, str.tostring(macdLine, "#.####") + (macdLine > 0 ? " +" : " -"), cBgVal, macdLine > 0 ? cGreen : cRed)
+        f_cell(0, 2, "RSI2", cBgLabel, cTxtDim)
+        f_cell(1, 2, str.tostring(rsiVal, "#.1"), cBgVal, rsiVal < mrBuyTh ? cAqua : rsiVal > mrSellTh ? cOrange : cTxt)
+        f_cell(0, 3, "vs 200MA", cBgLabel, cTxtDim)
+        f_cell(1, 3, close > ma ? "線上" : "線下", cBgVal, close > ma ? cGreen : cRed)
+        f_cell(0, 4, "下一訊號", cBgLabel, cTxtDim)
+        f_cell(1, 4, nextSig, cBgVal, nextCol)
+        f_cell(0, 5, "模式", cBgLabel, cTxtDim)
+        f_cell(1, 5, "雙引擎", cBgVal, cTxt)
+        f_cell(0, 6, "止蝕", cBgLabel, cTxtDim)
+        stopTxt = strategy.position_size > 0 and not na(stopPx) ? str.tostring(stopPx, "#.##") : "-"
+        f_cell(1, 6, stopTxt, cBgVal, cTxt)
+else if not showPanel and barstate.islast
+    // 清空避免殘影
+    for r = 0 to 6
+        f_cell(0, r, "", color.new(color.black, 100), color.new(color.black, 100))
+        f_cell(1, r, "", color.new(color.black, 100), color.new(color.black, 100))

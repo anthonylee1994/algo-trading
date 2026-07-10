@@ -1,0 +1,185 @@
+//@version=6
+strategy("Larry Williams 三規律 (優化版 SMA+%R+ROC)",
+     overlay = true,
+     pyramiding = 0,
+     initial_capital = 100000,
+     default_qty_type = strategy.percent_of_equity,
+     default_qty_value = 100,
+     commission_type = strategy.commission.percent,
+     commission_value = 0.05,
+     slippage = 1,
+     process_orders_on_close = false)  // 下一根開市成交, 同 Python 回測一致
+
+// ============================================================
+// 三規律結合 (Larry Williams 短線體系)
+//   (1) 慣性 → SMA 趨勢 filter + 破勢止損
+//   (2) 超買超賣 → Williams %R 升勢超賣入場
+//   (3) 動量先於趨勢完 → ROC 穿自身 MA 止賺 (只喺 ROC>0 時, roc_pos)
+//
+// 2026-07 回測優化 (yfinance 日線, 0.05% 佣金, next-open, long-only):
+//   原裝筆記 SMA50/%R20/cross/ROC/partial50% → 幾乎唔能用 (CAGR~0, 勝率差)
+//
+//   優化預設 SMA200 + %R(14)≤-85 level + ROC(20) 穿 MA10 且 ROC>0:
+//     SPY 05-26: CAGR 5.9%  Sharpe 0.88  MaxDD -11%  win~76%  (BH: 10.9% / 0.64 / -55%)
+//     QQQ 05-26: CAGR 7.5%  Sharpe 0.83  MaxDD -19%  win~77%  (BH: 15.3% / 0.77 / -53%)
+//     SMH 05-26: CAGR 14.0% Sharpe 1.09  MaxDD -18%  win~66%  (BH: 19.2% / 0.74 / -64%)
+//     test 2019+: 平均 te Sharpe ~1.07 (唔過擬合)
+//
+//   定位: 風險調整後可用 (Sharpe↑ DD↓), 唔係追 B&H 絕對報酬。
+//   單股 9988.HK 無效 → 用指數/板塊 ETF, 唔好硬套個股。
+//   腳本: scripts/backtest_wpr_three_rules.py
+// ============================================================
+
+// --- 1) 趨勢 ---
+grpTrend  = "1) 趨勢 (Filter + 止損)"
+trendLen  = input.int(200, "SMA 長度 (優化: 200; 筆記 10週≈50 已驗證差)", minval = 10, group = grpTrend)
+useMaStop = input.bool(true, "破 SMA 止損", group = grpTrend)
+
+// --- 2) %R ---
+grpWr    = "2) Williams %R 進場"
+wrLen    = input.int(14, "%R 長度 (優化 14)", minval = 2, group = grpWr)
+wrOs     = input.float(-85.0, "超賣門檻 ≤ (優化 -85)", minval = -100, maxval = -50, step = 1, group = grpWr)
+wrOb     = input.float(-10.0, "超買線 (部分止賺用)", minval = -50, maxval = 0, step = 1, group = grpWr)
+entryMode = input.string("level", "入場模式", options = ["level", "cross"], group = grpWr,
+     tooltip = "level: 升勢+處於超賣區即可入 (優化勝出)\ncross: %R 向下穿超賣線先入")
+
+// --- 3) ROC 動量 ---
+grpMom   = "3) ROC 動量止賺"
+rocLen   = input.int(20, "ROC 長度 (優化 20; 筆記 25 亦可)", minval = 2, group = grpMom)
+rocMaLen = input.int(10, "ROC-MA 長度", minval = 2, group = grpMom)
+exitMode = input.string("roc_pos", "出場模式",
+     options = ["roc_pos", "roc", "trend_only"], group = grpMom,
+     tooltip = "roc_pos: ROC 由上穿下自身 MA 且 ROC>0 (優化最佳)\nroc: 任何 ROC 穿下 MA\ntrend_only: 只靠破 SMA")
+
+// --- 交易 ---
+grpTrade = "交易設定"
+allowLong  = input.bool(true, "允許做好", group = grpTrade)
+allowShort = input.bool(false, "允許做淡 (預設關; 指數回測淡倉無幫助)", group = grpTrade)
+usePartial = input.bool(false, "%R 部分止賺 (優化: 關; 開會截短贏家)", group = grpTrade)
+partialPct = input.float(50.0, "部分止賺 %", minval = 10, maxval = 90, step = 5, group = grpTrade)
+// 動量止賺後, 同一輪超賣唔再入 (避免抖)
+blockReentry = input.bool(true, "動量止賺後等離開超賣先再入", group = grpTrade)
+
+// --- 視覺 ---
+grpVis = "視覺化"
+showSma   = input.bool(true, "顯示 SMA", group = grpVis)
+showBg    = input.bool(true, "升勢背景", group = grpVis)
+showPanel = input.bool(true, "狀態面板", group = grpVis)
+
+// ============================================================
+// 指標
+// ============================================================
+sma = ta.sma(close, trendLen)
+uptrend = close > sma
+downtrend = close < sma
+
+wpr = ta.wpr(wrLen)  // -100 超賣 .. 0 超買
+roc = ta.roc(close, rocLen)
+rocMa = ta.sma(roc, rocMaLen)
+
+inOs = wpr <= wrOs
+inOb = wpr >= wrOb
+
+enterOs = ta.crossunder(wpr, wrOs)
+leaveOs = ta.crossover(wpr, wrOs)
+enterOb = ta.crossover(wpr, wrOb)
+
+rocCrossDn = ta.crossunder(roc, rocMa)
+rocCrossUp = ta.crossover(roc, rocMa)
+momExitLong = switch exitMode
+    "roc_pos" => rocCrossDn and roc > 0
+    "roc" => rocCrossDn
+    => false
+momExitShort = switch exitMode
+    "roc_pos" => rocCrossUp and roc < 0
+    "roc" => rocCrossUp
+    => false
+
+breakLong = useMaStop and ta.crossunder(close, sma)
+breakShort = useMaStop and ta.crossover(close, sma)
+trendOnlyLongExit = exitMode == "trend_only" and breakLong
+trendOnlyShortExit = exitMode == "trend_only" and breakShort
+
+longEntryRaw = allowLong and uptrend and (entryMode == "level" ? inOs : enterOs)
+shortEntryRaw = allowShort and downtrend and (entryMode == "level" ? inOb : enterOb)
+
+// 動量止賺後封鎖再入, 直到 %R 離開超賣/超買
+var bool longBlock = false
+var bool shortBlock = false
+var bool partialTaken = false
+
+if strategy.position_size == 0
+    partialTaken := false
+
+if leaveOs
+    longBlock := false
+if ta.crossunder(wpr, wrOb)  // 離開超買向下
+    shortBlock := false
+
+longEntry = longEntryRaw and not longBlock
+shortEntry = shortEntryRaw and not shortBlock
+
+// ============================================================
+// 下單
+// ============================================================
+if strategy.position_size == 0
+    if longEntry
+        strategy.entry("LW-Long", strategy.long)
+    else if shortEntry
+        strategy.entry("LW-Short", strategy.short)
+
+if strategy.position_size > 0
+    if usePartial and not partialTaken and enterOb
+        strategy.close("LW-Long", qty_percent = partialPct, comment = "%R部分")
+        partialTaken := true
+    if momExitLong
+        strategy.close("LW-Long", comment = "動量止賺")
+        if blockReentry
+            longBlock := true
+    else if breakLong or trendOnlyLongExit
+        strategy.close("LW-Long", comment = "趨勢止損")
+
+if strategy.position_size < 0
+    if usePartial and not partialTaken and enterOs
+        strategy.close("LW-Short", qty_percent = partialPct, comment = "%R部分")
+        partialTaken := true
+    if momExitShort
+        strategy.close("LW-Short", comment = "動量止賺")
+        if blockReentry
+            shortBlock := true
+    else if breakShort or trendOnlyShortExit
+        strategy.close("LW-Short", comment = "趨勢止損")
+
+// ============================================================
+// 視覺
+// ============================================================
+plot(showSma ? sma : na, "SMA",
+     color = uptrend ? color.new(color.teal, 0) : color.new(color.red, 40),
+     linewidth = 2)
+bgcolor(showBg and uptrend ? color.new(color.green, 93) : na)
+
+plotshape(strategy.position_size == 0 and longEntry, "做好",
+     shape.triangleup, location.belowbar, color = color.lime, size = size.small, text = "L")
+plotshape(strategy.position_size == 0 and shortEntry, "做淡",
+     shape.triangledown, location.abovebar, color = color.red, size = size.small, text = "S")
+plotshape(strategy.position_size > 0 and momExitLong, "動量止賺",
+     shape.xcross, location.abovebar, color = color.orange, size = size.tiny)
+
+plot(wpr, "%R", display = display.data_window)
+plot(roc, "ROC", display = display.data_window)
+plot(rocMa, "ROC-MA", display = display.data_window)
+
+var table panel = table.new(position.top_right, 2, 6, border_width = 1)
+if showPanel and barstate.islast
+    table.cell(panel, 0, 0, "項目", text_color = color.white, bgcolor = color.gray)
+    table.cell(panel, 1, 0, "狀態", text_color = color.white, bgcolor = color.gray)
+    table.cell(panel, 0, 1, "趨勢")
+    table.cell(panel, 1, 1, uptrend ? "升勢(>SMA)" : "非升勢", text_color = uptrend ? color.green : color.red)
+    table.cell(panel, 0, 2, "%R")
+    table.cell(panel, 1, 2, str.tostring(wpr, "#.1") + (inOs ? " 超賣" : inOb ? " 超買" : ""))
+    table.cell(panel, 0, 3, "ROC")
+    table.cell(panel, 1, 3, str.tostring(roc, "#.2"))
+    table.cell(panel, 0, 4, "封鎖再入")
+    table.cell(panel, 1, 4, longBlock ? "是" : "否")
+    table.cell(panel, 0, 5, "持倉")
+    table.cell(panel, 1, 5, strategy.position_size > 0 ? "好倉" : strategy.position_size < 0 ? "淡倉" : "空倉")

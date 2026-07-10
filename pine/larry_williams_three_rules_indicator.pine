@@ -1,0 +1,48 @@
+//@version=6
+indicator("Larry Williams 三規律 副圖 (%R + ROC)", overlay = false, max_lines_count = 50)
+
+// 同策略共用參數, 方便對照圖表
+// 上半視覺: Williams %R；下半可用第二個 instance 只開 ROC (見 showMode)
+
+grp = "顯示"
+showMode = input.string("%R + ROC", "顯示模式", options = ["%R + ROC", "只 %R", "只 ROC"], group = grp)
+
+grpWr = "%R"
+wrLen     = input.int(14, "%R 長度 (優化 14)", minval = 2, group = grpWr)
+wrLongTh  = input.float(-85.0, "超賣線 (優化 -85)", minval = -100, maxval = -50, step = 1, group = grpWr)
+wrShortTh = input.float(-10.0, "超買線", minval = -50, maxval = 0, step = 1, group = grpWr)
+
+grpMom = "ROC"
+rocLen   = input.int(20, "ROC 長度 (優化 20)", minval = 2, group = grpMom)
+rocMaLen = input.int(10, "ROC-MA 長度 (M2)", minval = 2, group = grpMom)
+
+showWr  = showMode != "只 ROC"
+showRoc = showMode != "只 %R"
+
+wpr   = ta.wpr(wrLen)
+roc   = ta.roc(close, rocLen)
+rocMa = ta.sma(roc, rocMaLen)
+
+// --- %R 面板 (TV: -100 超賣 ~ 0 超買) ---
+plot(showWr ? wpr : na, "%R", color = color.purple, linewidth = 2)
+hline(showWr ? 0 : na, "0", color = color.new(color.gray, 50))
+hline(showWr ? -100 : na, "-100", color = color.new(color.gray, 50))
+hline(showWr ? wrLongTh : na, "超賣", color = color.new(color.green, 0), linestyle = hline.style_dashed)
+hline(showWr ? wrShortTh : na, "超買", color = color.new(color.red, 0), linestyle = hline.style_dashed)
+hline(showWr ? -50 : na, "中軸", color = color.new(color.gray, 70), linestyle = hline.style_dotted)
+
+bgcolor(showWr and wpr <= wrLongTh ? color.new(color.green, 85) : showWr and wpr >= wrShortTh ? color.new(color.red, 85) : na)
+
+// --- ROC (同 panel 縮放; 數值單位 % 同 %R 唔同, 建議「只 ROC」另加一 pane) ---
+plot(showRoc ? roc : na, "ROC", color = color.blue, linewidth = 2)
+plot(showRoc ? rocMa : na, "ROC-MA (M2)", color = color.orange, linewidth = 1)
+hline(showRoc ? 0 : na, "ROC 零軸", color = color.new(color.teal, 40))
+
+// M2 交叉標記
+plotshape(showRoc and ta.crossunder(roc, rocMa), "ROC 穿下 MA", shape.triangledown, location.top, color = color.orange, size = size.tiny)
+plotshape(showRoc and ta.crossover(roc, rocMa), "ROC 穿上 MA", shape.triangleup, location.bottom, color = color.aqua, size = size.tiny)
+
+// 動量四象限 (data window)
+momState = roc > 0 ? (roc > roc[1] ? 2 : 1) : (roc > roc[1] ? -1 : -2)
+// 2=升動加強 1=升動減弱 -1=跌動減弱 -2=跌動加強
+plot(momState, "動量狀態", display = display.data_window)

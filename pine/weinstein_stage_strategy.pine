@@ -1,96 +1,162 @@
 //@version=6
-strategy("Weinstein 股價四階段 (30週線)",
+strategy("Weinstein 股價四階段 (優化版)",
      overlay = true,
      pyramiding = 0,
      initial_capital = 100000,
      default_qty_type = strategy.percent_of_equity,
      default_qty_value = 100,
      commission_type = strategy.commission.percent,
-     commission_value = 0.02,
+     commission_value = 0.05,
      slippage = 1,
-     process_orders_on_close = true)
+     process_orders_on_close = false)  // 下一根開市, 同 Python 回測
 
 // ============================================================
 // Stan Weinstein《Secrets For Profiting in Bull and Bear Markets》(1988)
-// 股價四階段, 用 30 週線斜率 + 價格相對位置分類:
-//   第一階段 底部: 30週線由跌轉平, 價格圍住條線上落 (唔買, 等突破)
-//   第二階段 上漲: 價格企線上 + 線向上 → 揸貨
-//   第三階段 頂部: 線由升轉平, 價格圍線波動 (減磅/離場)
-//   第四階段 下跌: 價格跌穿線 + 線向下 → 空倉
+// 四階段: 30週線斜率 + 價格相對位置
+//   1 底部: 線平/跌, 價圍線 → 唔買
+//   2 上漲: 價企線上 + 線向上 → 揸貨
+//   3 頂部: 離開第二後過渡 → 減磅/離場
+//   4 下跌: 價跌穿線 + 線向下 → 空倉
 //
-// 2026-07-04 回測驗證 (yfinance 日線, 150日SMA≈30週, 連 2bps 成本):
-//   淨第二階段揸貨 (預設):
-//     QQQ full: Sharpe 0.64 / CAGR 9.2% / DD -54.9%  (BH: 0.45 / -83%)
-//     QQQ 09- : Sharpe 1.03 / CAGR 15.4% / DD -21.9% (BH: 1.01 / -35%)
-//     SPY full: Sharpe 0.67 / CAGR 6.9% / DD -23.7%  (BH: 0.53 / -55%)
-//   + 突破橫行區頂先入: SPY 更好 (0.74/-21.8%), QQQ 更差 (0.56) — 自己揀
-//   + 放量確認 (原著建議): 兩隻都大傷 (Sharpe 0.41/0.56), 預設熄,
-//     指數 ETF 成交量係恐慌指標唔係需求指標, 呢點 1988 年嘅個股經驗唔適用
-//   對照: 雙引擎策略 09- Sharpe 1.11 (QQQ) / 0.96 (SPY) — 仲係贏呢個
+// 2026-07 回測 (yfinance, next-open, 5bps; scripts/backtest_weinstein_stage.py):
+//
+//   原預設 MA150/slope10/anytime/leave2 (無緩衝):
+//     SPY full: Sh 0.65 / CAGR 6.6% / DD -23%
+//     QQQ full: Sh 0.68 / CAGR 9.9% / DD -52%   ← 科網泡沬拖累
+//     QQQ 09+ : Sh 0.99 / CAGR 14.8% / DD -24%
+//
+//   優化預設 MA200 + 1% hysteresis + transition 入場 + leave2:
+//     SPY full: Sh 0.66 / CAGR 6.6% / DD -20%   (B&H Sh 0.53 / DD -55%)
+//     QQQ full: Sh 0.72 / CAGR 9.7% / DD -24%   ← DD 由 -52% 削到 -24%
+//     QQQ test 2019+: Sh 1.15 / CAGR 19.8%
+//     SMH full: Sh 0.66 / CAGR 11.6% / DD -34%
+//     2bps 佣金幾乎一樣
+//
+//   可選 partial3 (第三階段減 50%): 勝率↑、CAGR 略低, 適合想細波動
+//   可選 stage4 (撑到第四先走): CAGR 更高、DD 更大
+//   橫行突破 / 放量: 原著建議; 指數上 base 有時幫 SPY、傷 QQQ; 放量有害預設關
+//   對照雙引擎 09- QQQ Sh 1.11 — 仲係贏 Weinstein; 呢條係中長線 stage 工具
 // ============================================================
 
-// --- 輸入參數 ---
-maLen    = input.int(150, "均線日數 (日線用150≈30週; 週線圖用30)", minval = 10)
-slopeLb  = input.int(10, "均線斜率窗口", minval = 1)
-useBase  = input.bool(false, "入場要突破橫行區頂 (SPY 開/QQQ 熄)", group = "入場加強")
-baseLen  = input.int(30, "橫行區日數", minval = 5, group = "入場加強")
-useVol   = input.bool(false, "突破要放量 1.3x (已驗證有害, 唔建議)", group = "入場加強")
-showStageMarks = input.bool(true, "圖上標示每個階段", group = "視覺化")
-showStagePanel = input.bool(true, "右上角顯示目前階段", group = "視覺化")
+// --- 核心 ---
+grpCore = "核心 (四階段)"
+maLen   = input.int(200, "均線日數 (優化 200; 原著日線≈150≈30週)", minval = 10, group = grpCore)
+slopeLb = input.int(10, "均線斜率窗口", minval = 1, group = grpCore)
+hystPct = input.float(1.0, "緩衝帶 % (優化 1; 0=無)", minval = 0.0, maxval = 5.0, step = 0.1, group = grpCore,
+     tooltip = "價要高過 MA*(1+h%) 先算『線上』, 低過 MA*(1-h%) 先算『線下』, 減 whipsaw")
 
-// --- 階段判斷 ---
-ma      = ta.sma(close, maLen)
-rising  = ma > ma[slopeLb]
+// --- 進出 ---
+grpIO = "進出場"
+entryMode = input.string("transition", "入場模式",
+     options = ["transition", "anytime", "after_stage1"], group = grpIO,
+     tooltip = "transition: 剛進入第二階段先買 (優化)\nanytime: 只要 stage==2 就入\nafter_stage1: 必須先見過第一階段")
+exitMode = input.string("leave2", "出場模式",
+     options = ["leave2", "stage4", "partial3"], group = grpIO,
+     tooltip = "leave2: 離開第二即全出 (優化/原 Pine)\nstage4: 撑到第四階段先走 (CAGR↑ DD↑)\npartial3: 第三減倉, 第四全出")
+partialPct = input.float(50.0, "partial3 減倉 %", minval = 10, maxval = 90, step = 5, group = grpIO)
+
+// --- 入場加強 ---
+grpBoost = "入場加強"
+useBase  = input.bool(false, "要突破橫行區頂 (SPY 可試開)", group = grpBoost)
+baseLen  = input.int(30, "橫行區日數", minval = 5, group = grpBoost)
+useVol   = input.bool(false, "突破要放量 1.3x (指數有害, 預設關)", group = grpBoost)
+volMult  = input.float(1.3, "放量倍數", minval = 1.0, step = 0.1, group = grpBoost)
+
+// --- 視覺 ---
+grpVis = "視覺化"
+showStageMarks = input.bool(true, "圖上標示階段轉換", group = grpVis)
+showStagePanel = input.bool(true, "右上角階段面板", group = grpVis)
+
+// ============================================================
+// 階段
+// ============================================================
+ma = ta.sma(close, maLen)
+rising = ma > ma[slopeLb]
 falling = ma < ma[slopeLb]
+h = hystPct / 100.0
+above = close > ma * (1.0 + h)
+below = close < ma * (1.0 - h)
 
-// 明確狀態: 2 = 價上+線升, 4 = 價下+線跌; 過渡狀態按前一階段分流:
-// 離開第二階段 → 第三 (頂部), 離開第四階段 → 第一 (底部)
 var int stage = 1
-if close > ma and rising
+if above and rising
     stage := 2
-else if close < ma and falling
+else if below and falling
     stage := 4
 else
     stage := stage == 2 or stage == 3 ? 3 : 1
 
-// --- 訊號 ---
-baseHigh = ta.highest(high, baseLen)[1]
-volOk    = not useVol or volume > 1.3 * ta.sma(volume, 50)
-entryOk  = stage == 2 and (not useBase or high > baseHigh) and volOk
-exitOk   = stage != 2
+enterStage2 = stage == 2 and stage[1] != 2
+leaveStage2 = stage != 2 and stage[1] == 2
 
+// after_stage1: 見過 stage1 之後先允許入第二
+var bool sawStage1 = true
+if stage == 1
+    sawStage1 := true
+if strategy.position_size > 0 and strategy.position_size[1] <= 0
+    sawStage1 := false  // 入場後要重新走循環先再計 (配合 after_stage1)
+
+baseHigh = ta.highest(high, baseLen)[1]
+volOk = not useVol or volume > volMult * ta.sma(volume, 50)
+baseOk = not useBase or high > baseHigh
+
+entryRaw = switch entryMode
+    "transition" => enterStage2
+    "after_stage1" => enterStage2 and sawStage1
+    => stage == 2  // anytime
+
+entryOk = entryRaw and baseOk and volOk
+
+// 出場
+fullExit = switch exitMode
+    "leave2" => stage != 2
+    "stage4" => stage == 4
+    "partial3" => stage == 4
+    => stage != 2
+
+partialExit = exitMode == "partial3" and stage == 3
+var bool partialTaken = false
+if strategy.position_size == 0
+    partialTaken := false
+
+// ============================================================
+// 下單
+// ============================================================
 if strategy.position_size <= 0 and entryOk
     strategy.entry("第二階段", strategy.long)
-if strategy.position_size > 0 and exitOk
-    strategy.close("第二階段", comment = stage == 3 ? "入第三階段" : "入第四階段")
 
-// --- 視覺化: 四階段背景 + 階段標示 ---
-stageColor = stage == 1 ? color.gray :
-     stage == 2 ? color.green :
-     stage == 3 ? color.orange :
-     color.red
-stageName = stage == 1 ? "第一階段 底部" :
-     stage == 2 ? "第二階段 上漲" :
-     stage == 3 ? "第三階段 頂部" :
-     "第四階段 下跌"
+if strategy.position_size > 0
+    if partialExit and not partialTaken
+        strategy.close("第二階段", qty_percent = partialPct, comment = "第三階段減倉")
+        partialTaken := true
+    if fullExit
+        strategy.close("第二階段", comment = stage == 3 ? "入第三階段" : stage == 4 ? "入第四階段" : "離第二階段")
+
+// ============================================================
+// 視覺
+// ============================================================
+stageColor = stage == 1 ? color.gray : stage == 2 ? color.green : stage == 3 ? color.orange : color.red
+stageName = stage == 1 ? "第一階段 底部" : stage == 2 ? "第二階段 上漲" : stage == 3 ? "第三階段 頂部" : "第四階段 下跌"
 stageChanged = bar_index > 0 and stage != stage[1]
 
 bgcolor(color.new(stageColor, stage == 2 or stage == 4 ? 90 : 88))
 
-plot(ma, "30週線", color = rising ? color.new(color.green, 20) : falling ? color.new(color.red, 20) : color.new(color.gray, 20), linewidth = 2)
+plot(ma, "階段均線", color = rising ? color.new(color.green, 20) : falling ? color.new(color.red, 20) : color.new(color.gray, 20), linewidth = 2)
+// 緩衝帶
+plot(h > 0 ? ma * (1.0 + h) : na, "線上界", color = color.new(color.teal, 70), linewidth = 1)
+plot(h > 0 ? ma * (1.0 - h) : na, "線下界", color = color.new(color.teal, 70), linewidth = 1)
 
-plotshape(stage == 2 and stage[1] != 2, "入第二階段", shape.triangleup, location.belowbar, color = color.green, size = size.small)
-plotshape(stage != 2 and stage[1] == 2, "離開第二階段", shape.triangledown, location.abovebar, color = color.red, size = size.small)
+plotshape(enterStage2, "入第二階段", shape.triangleup, location.belowbar, color = color.green, size = size.small)
+plotshape(leaveStage2, "離開第二階段", shape.triangledown, location.abovebar, color = color.red, size = size.small)
 plotshape(showStageMarks and stageChanged and stage == 1, "第一階段標示", shape.labelup, location.belowbar, color = color.gray, text = "第一階段\n底部", textcolor = color.white, size = size.tiny)
 plotshape(showStageMarks and stageChanged and stage == 2, "第二階段標示", shape.labelup, location.belowbar, color = color.green, text = "第二階段\n上漲", textcolor = color.white, size = size.tiny)
 plotshape(showStageMarks and stageChanged and stage == 3, "第三階段標示", shape.labeldown, location.abovebar, color = color.orange, text = "第三階段\n頂部", textcolor = color.white, size = size.tiny)
 plotshape(showStageMarks and stageChanged and stage == 4, "第四階段標示", shape.labeldown, location.abovebar, color = color.red, text = "第四階段\n下跌", textcolor = color.white, size = size.tiny)
 
-var table stagePanel = table.new(position.top_right, 1, 1)
+var table stagePanel = table.new(position.top_right, 1, 2, border_width = 1)
 if showStagePanel and barstate.islast
     table.cell(stagePanel, 0, 0, stageName, bgcolor = color.new(stageColor, 15), text_color = color.white)
+    table.cell(stagePanel, 0, 1, "MA" + str.tostring(maLen) + " h=" + str.tostring(hystPct) + "%", text_color = color.gray, bgcolor = color.new(color.black, 80))
 else if not showStagePanel and barstate.islast
-    table.cell(stagePanel, 0, 0, "", bgcolor = color.new(color.white, 100), text_color = color.new(color.white, 100))
+    table.cell(stagePanel, 0, 0, "", bgcolor = color.new(color.white, 100))
 
-// Data window
 plot(stage, "階段 (1-4)", color = color.blue, display = display.data_window)
